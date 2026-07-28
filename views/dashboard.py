@@ -1,14 +1,13 @@
-
 import streamlit as st
 import pandas as pd
 from core.dhan_client import DhanClient
-from core.quant_math import calculate_spread_metrics, compute_pl_and_risk
+from core.quant_math import calculate_auto_spread_metrics, compute_pl_and_risk
 from ai.quant_ai import evaluate_trade_with_ai
 
 def render_dashboard(client_id, access_token, secret_key):
     st.markdown("### 📊 MCX Quant Spread & Live Trading Desk")
     
-    # Global Macro / Fed Filter Widget in Sidebar/Top bar
+    # Global Macro / Fed Filter Widget
     col_macro1, col_macro2 = st.columns([3, 1])
     with col_macro1:
         st.info("🌐 **Global Macro & Fed Rate Impact Engine:** Active. Monitoring US CPI, Rate Decisions & Dollar Index.")
@@ -31,19 +30,20 @@ def render_dashboard(client_id, access_token, secret_key):
                 # Fetch live quotes if security IDs exist
                 quotes = client.fetch_quotes([sec1, sec2]) if sec1 and sec2 else {}
                 
-                # Extract prices or fallback to simulated live tick if API market closed
                 l1_price = float(quotes.get(sec1, {}).get("LTP", row.get("L1_Price_Fallback", 75000)))
                 l2_price = float(quotes.get(sec2, {}).get("LTP", row.get("L2_Price_Fallback", 75500)))
                 
-                side = row.get("Side", "LONG")
                 entry = float(row.get("Entry", 0))
                 
-                # Compute metrics
-                metrics = calculate_spread_metrics(l1_price, l2_price, row.get("OI_Delta", 12), row.get("RSI", 48), row.get("Expiry_Days", 52), side)
+                # Compute metrics using auto-direction engine
+                metrics = calculate_auto_spread_metrics(l1_price, l2_price, row.get("OI_Delta", 12), row.get("RSI", 48), row.get("Expiry_Days", 52))
+                
                 current_spread = metrics["spread_value"]
+                side = metrics["side"]
                 
                 pnl, target, stop = compute_pl_and_risk(entry, current_spread, side)
                 
+                row["Side"] = side
                 row["Pair Spread Value"] = f"₹{current_spread:,.2f}"
                 row["C/F"] = metrics["conviction"]
                 row["Target"] = round(target, 2)
@@ -59,14 +59,14 @@ def render_dashboard(client_id, access_token, secret_key):
             st.session_state.real_live_desk = updated_rows
             st.success("✅ Live calculation completed successfully!")
 
-    # Render table matching exact user requirements
+    # Render table
     table_data = []
     for row in st.session_state.real_live_desk:
         table_data.append({
             "Pair Spread": row.get("Pair", "—"),
             "Spread Value": row.get("Pair Spread Value", "—"),
             "C/F": row.get("C/F", "—"),
-            "Side": row.get("Side", "LONG"),
+            "Side (Auto)": row.get("Side", "LONG"),
             "Status": row.get("Status", "pending"),
             "Opened": row.get("Opened", "—"),
             "Entry": row.get("Entry", 0.0),
@@ -79,7 +79,7 @@ def render_dashboard(client_id, access_token, secret_key):
     df = pd.DataFrame(table_data)
     st.dataframe(df, use_container_width=True, hide_index=True)
     
-    # AI Trade Intelligence & Signal Breakdown for selected row
+    # AI Trade Intelligence & Signal Breakdown
     st.markdown("---")
     st.markdown("### 🤖 Quant AI Trade Intelligence & Risk Analysis")
     selected_pair_idx = st.selectbox("Select Contract Pair for Deep AI Audit", range(len(st.session_state.real_live_desk)), format_func=lambda i: st.session_state.real_live_desk[i].get("Pair"))
