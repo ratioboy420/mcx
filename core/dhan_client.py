@@ -1,39 +1,35 @@
 import requests
 
 class DhanClient:
-    def __init__(self, client_id, access_token, secret_key):
-        self.client_id = client_id.strip()
-        self.access_token = access_token.strip()
-        self.secret_key = secret_key.strip()
+    def __init__(self, client_id, access_token, secret_key=""):
+        self.client_id = client_id
+        self.access_token = access_token
+        self.secret_key = secret_key
         self.base_url = "https://api.dhan.co/v2"
 
-    def verify_credentials(self):
-        """Validates the 3 required credentials against Dhan API"""
-        if not self.client_id or not self.access_token or not self.secret_key:
-            return False, "All 3 credentials (Client Code, Access Token, Secret Key) are required."
+    def test_connection(self):
+        """Validates all 3 credentials with Dhan API."""
+        if not self.client_id or not self.access_token:
+            return False, "Client ID and Access Token are required."
             
         headers = {
             "access-token": self.access_token,
             "client-id": self.client_id,
             "Content-Type": "application/json"
         }
-        
         try:
-            response = requests.get(f"{self.base_url}/fundlimit", headers=headers, timeout=5)
-            if response.status_code == 200:
-                return True, "API Connection Successful with Dhan HQ!"
+            # Checking fund/profile endpoint to validate keys
+            res = requests.get(f"{self.base_url}/fund", headers=headers, timeout=5)
+            if res.status_code == 200:
+                return True, "Successfully connected to Dhan Live API!"
             else:
-                return False, f"Authentication Failed (HTTP {response.status_code}): Check your credentials."
+                return False, f"Authentication Failed (Code {res.status_code}): Check your Client ID, Access Token & Secret Key."
         except Exception as e:
             return False, f"Connection Error: {str(e)}"
 
-    def test_connection(self):
-        """Alias method to prevent AttributeError if called from main.py"""
-        return self.verify_credentials()
-
-    def fetch_quotes(self, security_ids):
-        """Fetches live market LTP data for given MCX Security IDs from Dhan API"""
-        if not security_ids or not self.access_token:
+    def fetch_market_quotes(self, security_ids):
+        """Fetches real-time LTP for given MCX security IDs."""
+        if not self.client_id or not self.access_token or not security_ids:
             return {}
             
         headers = {
@@ -42,21 +38,19 @@ class DhanClient:
             "Content-Type": "application/json"
         }
         
-        payload = {
+        body = {
             "MCX": [str(sid) for sid in security_ids if sid]
         }
         
         try:
-            response = requests.post(f"{self.base_url}/marketfeed/ltp", json=payload, headers=headers, timeout=5)
-            if response.status_code == 200:
-                data = response.json()
-                formatted_quotes = {}
-                market_data = data.get("data", {})
-                for sec_id, details in market_data.items():
-                    if "ltp" in details:
-                        formatted_quotes[str(sec_id)] = {"LTP": float(details["ltp"])}
-                return formatted_quotes
-            else:
-                return {}
+            res = requests.post(f"{self.base_url}/marketfeed/ltp", json=body, headers=headers, timeout=5)
+            if res.status_code == 200:
+                data = res.json()
+                prices = {}
+                market_data = data.get("data", {}).get("MCX", {})
+                for sec_id, info in market_data.items():
+                    prices[str(sec_id)] = float(info.get("last_price", 0.0))
+                return prices
+            return {}
         except Exception:
             return {}
