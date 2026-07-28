@@ -1,25 +1,39 @@
-
 import numpy as np
 
-def calculate_spread_metrics(leg1_price, leg2_price, leg1_oi_change, leg2_oi_change, rsi_val, expiry_days, side="LONG"):
-    # Real-time mathematical computations based on Winning Profile
-    spread_value = abs(leg1_price - leg2_price) if side == "LONG" else abs(leg2_price - leg1_price)
+def calculate_auto_spread_metrics(leg1_price, leg2_price, leg1_oi_change, rsi_val, expiry_days):
+    # Automated Direction Detection based on Spread Value & Z-Score
+    raw_diff = leg1_price - leg2_price
+    side = "LONG" if raw_diff >= 0 else "SHORT"
+    spread_value = abs(raw_diff)
     
-    # Z-Score estimation based on price variance
+    # Z-Score estimation
     mean_val = (leg1_price + leg2_price) / 2
     z_score = round((spread_value - mean_val) / (mean_val * 0.05 + 1e-6), 2)
     
-    # Conviction Rating (1/3, 2/3, 3/3)
+    # Conviction Rating
     conviction = "2/3"
-    if rsi_val > 45 and rsi_val < 55 and leg1_oi_change > 10:
-        conviction = "1/3"
+    try:
+        rsi_val = float(rsi_val)
+        leg1_oi_change = float(leg1_oi_change)
+    except:
+        rsi_val = 50
+        leg1_oi_change = 0
+
+    if 45 <= rsi_val <= 55 and leg1_oi_change > 10:
+        conviction = "1/3 (High Conviction)"
     elif z_score < -1.5 or z_score > 1.5:
-        conviction = "3/3 (Red Flag)"
+        conviction = "3/3 (Red Flag / Mean Reversion Zone)"
         
-    # Recommended Holding Duration (Days) based on Winning Profile rules
-    holding_days = 52 if (expiry_days >= 45 and expiry_days <= 60) else 35
+    # Dynamic Holding Duration based on Expiry distance
+    try:
+        exp = int(expiry_days)
+    except:
+        exp = 52
+        
+    holding_days = exp if exp <= 90 else 87
     
     return {
+        "side": side,
         "spread_value": spread_value,
         "z_score": z_score,
         "conviction": conviction,
