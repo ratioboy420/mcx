@@ -2,12 +2,18 @@ import numpy as np
 
 def calculate_auto_spread_metrics(leg1_price, leg2_price, leg1_oi_change, rsi_val, expiry_days):
     # Automated Direction Detection based on Spread Value & Z-Score
-    raw_diff = leg1_price - leg2_price
+    try:
+        l1 = float(leg1_price)
+        l2 = float(leg2_price)
+    except:
+        l1, l2 = 0.0, 0.0
+        
+    raw_diff = l1 - l2
     side = "LONG" if raw_diff >= 0 else "SHORT"
     spread_value = abs(raw_diff)
     
     # Z-Score estimation
-    mean_val = (leg1_price + leg2_price) / 2
+    mean_val = (l1 + l2) / 2 if (l1 + l2) > 0 else 1.0
     z_score = round((spread_value - mean_val) / (mean_val * 0.05 + 1e-6), 2)
     
     # Conviction Rating
@@ -41,8 +47,14 @@ def calculate_auto_spread_metrics(leg1_price, leg2_price, leg1_oi_change, rsi_va
     }
 
 def compute_pl_and_risk(entry_price, current_spread, side, lot_size=50):
-    diff = (current_spread - entry_price) if side == "LONG" else (entry_price - current_spread)
+    try:
+        e = float(entry_price)
+        c = float(current_spread)
+    except:
+        e, c = 0.0, 0.0
+        
+    diff = (c - e) if side == "LONG" else (e - c)
     pnl = diff * lot_size
-    target = entry_price * 1.04 if side == "LONG" else entry_price * 0.96
-    stop_loss = entry_price * 0.98 if side == "LONG" else entry_price * 1.02
+    target = e * 1.04 if side == "LONG" else e * 0.96
+    stop_loss = e * 0.98 if side == "LONG" else e * 1.02
     return pnl, target, stop_loss
