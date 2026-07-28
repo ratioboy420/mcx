@@ -8,7 +8,7 @@ class DhanClient:
         self.base_url = "https://api.dhan.co/v2"
 
     def test_connection(self):
-        """Validates all 3 credentials with Dhan API."""
+        """Validates credentials using Dhan API valid endpoint."""
         if not self.client_id or not self.access_token:
             return False, "Client ID and Access Token are required."
             
@@ -17,13 +17,23 @@ class DhanClient:
             "client-id": self.client_id,
             "Content-Type": "application/json"
         }
+        
         try:
-            # Checking fund/profile endpoint to validate keys
-            res = requests.get(f"{self.base_url}/fund", headers=headers, timeout=5)
+            # Using the official Dhan API profile/fund endpoint
+            # Correct endpoint for Dhan v2 fund details
+            res = requests.get(f"{self.base_url}/fundlimit", headers=headers, timeout=5)
+            
             if res.status_code == 200:
                 return True, "Successfully connected to Dhan Live API!"
+            elif res.status_code == 401:
+                return False, "Authentication Failed (401): Invalid Access Token or Client ID."
             else:
-                return False, f"Authentication Failed (Code {res.status_code}): Check your Client ID, Access Token & Secret Key."
+                # Fallback check with an empty marketfeed request to verify headers
+                test_feed = requests.post(f"{self.base_url}/marketfeed/ltp", json={"MCX": ["500123"]}, headers=headers, timeout=5)
+                if test_feed.status_code == 200:
+                    return True, "Successfully connected to Dhan Live API!"
+                else:
+                    return False, f"API Connection Error (Code {res.status_code}): Please check your credentials."
         except Exception as e:
             return False, f"Connection Error: {str(e)}"
 
