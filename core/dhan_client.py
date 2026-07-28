@@ -8,7 +8,7 @@ class DhanClient:
         self.base_url = "https://api.dhan.co/v2"
 
     def test_connection(self):
-        """Validates credentials using Dhan API valid endpoint."""
+        """Validates all 3 credentials with Dhan API."""
         if not self.client_id or not self.access_token:
             return False, "Client ID and Access Token are required."
             
@@ -17,23 +17,12 @@ class DhanClient:
             "client-id": self.client_id,
             "Content-Type": "application/json"
         }
-        
         try:
-            # Using the official Dhan API profile/fund endpoint
-            # Correct endpoint for Dhan v2 fund details
             res = requests.get(f"{self.base_url}/fundlimit", headers=headers, timeout=5)
-            
             if res.status_code == 200:
                 return True, "Successfully connected to Dhan Live API!"
-            elif res.status_code == 401:
-                return False, "Authentication Failed (401): Invalid Access Token or Client ID."
             else:
-                # Fallback check with an empty marketfeed request to verify headers
-                test_feed = requests.post(f"{self.base_url}/marketfeed/ltp", json={"MCX": ["500123"]}, headers=headers, timeout=5)
-                if test_feed.status_code == 200:
-                    return True, "Successfully connected to Dhan Live API!"
-                else:
-                    return False, f"API Connection Error (Code {res.status_code}): Please check your credentials."
+                return False, f"Authentication Failed (Code {res.status_code}): Check your credentials."
         except Exception as e:
             return False, f"Connection Error: {str(e)}"
 
@@ -64,3 +53,7 @@ class DhanClient:
             return {}
         except Exception:
             return {}
+
+    def fetch_quotes(self, security_ids):
+        """Alias method to prevent AttributeError when dashboard calls fetch_quotes."""
+        return self.fetch_market_quotes(security_ids)
