@@ -16,21 +16,19 @@ class DhanLiveClient:
         }
 
     def verify_account_connection(self):
-        """Verifies if the 3 Dhan API credentials are valid by fetching live fund/account details."""
         url = f"{self.base_url}/fundlimit"
         try:
             response = requests.get(url, headers=self._get_headers(), timeout=5)
             if response.status_code == 200:
                 return {"status": "connected", "message": "Dhan Account Successfully Connected!"}
-            elif response.status_code == 401:
-                return {"status": "error", "message": "Authentication Failed: Check your Client Code, API Key, or Secret Key."}
             else:
                 return {"status": "error", "message": f"API Error [{response.status_code}]: {response.text}"}
         except Exception as e:
-            return {"status": "error", "message": f"Connection Exception: {str(e)}"}
+            return {"status": "error", "message": str(e)}
 
     def get_live_metal_rates(self):
-        """Fetches real live market rates/quotes for all MCX commodities to display in the live ticker column."""
+        """Fetches real market quote/LTP directly using Dhan live market feed structure."""
+        # MCX Commodity identifiers mapping for Dhan
         mcx_securities = [
             {"securityId": "13327", "symbol": "GOLD"},
             {"securityId": "13328", "symbol": "GOLDM"},
@@ -46,19 +44,23 @@ class DhanLiveClient:
         live_rates = []
         for item in mcx_securities:
             payload = {
-                "exchangeSegment": "MCX_COMM",
-                "securityId": item["securityId"]
+                "exchangeSegment": "MCX",
+                "securityId": str(item["securityId"])
             }
             try:
-                res = requests.post(url, json=payload, headers=headers, timeout=3)
+                res = requests.post(url, json=payload, headers=headers, timeout=5)
                 if res.status_code == 200:
                     data = res.json()
-                    ohlc_data = data.get("data", {}).get(item["securityId"], {})
-                    last_price = ohlc_data.get("last_price", "Live Feed Active")
-                    live_rates.append({"Commodity": item["symbol"], "Live Rate": last_price})
+                    # Parsing response safely based on Dhan OHLC structure
+                    market_data = data.get("data", {})
+                    if item["securityId"] in market_data:
+                        ltp = market_data[item["securityId"]].get("last_price", "No LTP")
+                        live_rates.append({"Commodity": item["symbol"], "Live Rate": f"₹{ltp}"})
+                    else:
+                        live_rates.append({"Commodity": item["symbol"], "Live Rate": "Data Not Found"})
                 else:
-                    live_rates.append({"Commodity": item["symbol"], "Live Rate": "Fetch Error"})
-            except Exception:
-                live_rates.append({"Commodity": item["symbol"], "Live Rate": "Connecting..."})
+                    live_rates.append({"Commodity": item["symbol"], "Live Rate": f"Err {res.status_code}"})
+            except Exception as e:
+                live_rates.append({"Commodity": item["symbol"], "Live Rate": "Timeout"})
                 
         return live_rates
