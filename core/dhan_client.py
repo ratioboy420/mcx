@@ -8,7 +8,7 @@ class DhanClient:
         self.base_url = "https://api.dhan.co/v2"
 
     def test_connection(self):
-        """Validates all 3 credentials with Dhan API."""
+        """Validates all 3 credentials using Dhan API fund/profile endpoint."""
         if not self.client_id or not self.access_token:
             return False, "Client ID and Access Token are required."
             
@@ -27,7 +27,7 @@ class DhanClient:
             return False, f"Connection Error: {str(e)}"
 
     def fetch_market_quotes(self, security_ids):
-        """Fetches real-time LTP for given MCX security IDs."""
+        """Fetches real-time LTP for given MCX security IDs across all commodities."""
         if not self.client_id or not self.access_token or not security_ids:
             return {}
             
@@ -55,5 +55,5 @@ class DhanClient:
             return {}
 
     def fetch_quotes(self, security_ids):
-        """Alias method to prevent AttributeError when dashboard calls fetch_quotes."""
+        """Alias method for compatibility."""
         return self.fetch_market_quotes(security_ids)
