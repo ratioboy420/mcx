@@ -110,8 +110,9 @@ def fetch_historical_prices(security_id):
     to_date = today.strftime("%Y-%m-%d")
     
     try:
+        # FIXED: Param changed from 'symbol' to 'security_id'
         response = dhan.historical_daily_data(
-            symbol=str(security_id),
+            security_id=str(security_id),
             exchange_segment='MCX_COMM',
             instrument_type='FUTCOM',
             expiry_code=0,
