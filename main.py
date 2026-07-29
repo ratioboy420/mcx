@@ -8,18 +8,25 @@ from agents.ai_engine import run_real_multi_agent_pipeline
 
 st.set_page_config(page_title="Dynamic MCX Quant & Spread Desk", layout="wide")
 
-# --- SIDEBAR: Permanent keys from secrets, Only 24hr Secret Key entered manually ---
+# Safe loading from Streamlit secrets with fallbacks
+def get_secret(key):
+    try:
+        return st.secrets.get(key, "")
+    except Exception:
+        return ""
+
+default_client = get_secret("client_code")
+default_api = get_secret("api_key")
+default_groq = get_secret("groq_key")
+
+# --- SIDEBAR: Credentials Management ---
 st.sidebar.title("🔐 API Credentials")
-st.sidebar.markdown("*Permanent credentials auto-loaded. Enter daily Secret/Access Key:*")
+st.sidebar.markdown("*Enter your credentials below:*")
 
-default_client = st.secrets.get("client_code", "")
-default_api = st.secrets.get("api_key", "")
-default_groq = st.secrets.get("groq_key", "")
-
-client_code = st.sidebar.text_input("Client Code", value=default_client)
-api_key = st.sidebar.text_input("API Key (Access Token)", type="password", value=default_api)
-secret_key = st.sidebar.text_input("Secret Key (24hr Expiry)", type="password", value="")
-groq_key = st.sidebar.text_input("Groq AI API Key", type="password", value=default_groq)
+client_code = st.sidebar.text_input("Client Code", value=st.session_state.get("client_code", default_client))
+api_key = st.sidebar.text_input("API Key (Access Token)", type="password", value=st.session_state.get("api_key", default_api))
+secret_key = st.sidebar.text_input("Secret Key (24hr Expiry)", type="password", value=st.session_state.get("secret_key", ""))
+groq_key = st.sidebar.text_input("Groq AI API Key", type="password", value=st.session_state.get("groq_key", default_groq))
 
 if groq_key:
     os.environ["GROQ_API_KEY"] = groq_key
@@ -42,17 +49,15 @@ if st.sidebar.button("Save & Connect"):
 
 st.title("⚡ MCX Dynamic Quant Spread & Expert Advisor Desk")
 
-active_api_key = api_key or st.session_state.get("api_key", "")
-active_client_code = client_code or st.session_state.get("client_code", "")
-active_secret_key = secret_key or st.session_state.get("secret_key", "")
+active_api_key = st.session_state.get("api_key", api_key)
+active_client_code = st.session_state.get("client_code", client_code)
+active_secret_key = st.session_state.get("secret_key", secret_key)
 
 if not active_api_key or not active_secret_key:
-    st.info("👈 Please provide your credentials in the sidebar to initialize live tracking.")
+    st.info("👈 Please provide your credentials in the sidebar and click **Save & Connect** to initialize live tracking.")
 else:
     client = DhanClient(active_client_code, active_api_key, active_secret_key)
     
-    # Dynamic Metal Mapping with Expiry Support
-    # Note: In production, these security IDs map to the live front-month and next-month contracts fetched via Dhan Instrument API.
     metal_map = {
         "GOLD (Current Expiry)": {"id": "13327", "seg": "MCX"},
         "GOLDM (Next Expiry)": {"id": "13328", "seg": "MCX"},
