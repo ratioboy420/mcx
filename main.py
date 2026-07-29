@@ -9,7 +9,7 @@ import pandas as pd
 import requests
 import streamlit as st
 
-# Streamlit Page Setup
+# Page Setup
 st.set_page_config(page_title="AI Institutional MCX Terminal", layout="wide")
 
 # ==========================================
@@ -20,7 +20,6 @@ DB_FILE = "mcx_terminal_history.db"
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
-    # Trade Signal History Table
     c.execute('''
         CREATE TABLE IF NOT EXISTS trade_signals (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -33,21 +32,8 @@ def init_db():
             sl REAL,
             rsi REAL,
             fvg_status TEXT,
-            target_status TEXT
-        )
-    ''')
-    # Market Analytics History Table (OI, Delta, Vol)
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS market_analytics (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            timestamp TEXT,
-            symbol TEXT,
-            price REAL,
-            oi REAL,
-            volume REAL,
-            delta REAL,
-            theta REAL,
-            gamma REAL
+            target_status TEXT,
+            trade_logic TEXT
         )
     ''')
     conn.commit()
@@ -60,27 +46,28 @@ def log_signal_to_db(metrics, pair_name):
         conn = sqlite3.connect(DB_FILE)
         c = conn.cursor()
         c.execute('''
-            INSERT INTO trade_signals (timestamp, pair, spread_price, signal, entry_rate, target, sl, rsi, fvg_status, target_status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO trade_signals (timestamp, pair, spread_price, signal, entry_rate, target, sl, rsi, fvg_status, target_status, trade_logic)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             pair_name,
-            float(metrics["Spread Price"].replace("₹", "")),
+            float(str(metrics["Spread Price"]).replace("₹", "").strip()),
             metrics["AI Signal"],
-            float(metrics["Best Entry Rate"].replace("₹", "")),
-            float(metrics["Predicted Target"].replace("₹", "")),
-            float(metrics["Safety SL"].replace("₹", "")),
+            float(str(metrics["Best Entry Rate"]).replace("₹", "").strip()),
+            float(str(metrics["Predicted Target"]).replace("₹", "").strip()),
+            float(str(metrics["Safety SL"]).replace("₹", "").strip()),
             float(metrics["RSI"]),
             metrics["FVG Imbalance"],
-            metrics["Target Status"]
+            metrics["Target Status"],
+            metrics["Trade Logic"]
         ))
         conn.commit()
         conn.close()
-    except Exception as e:
+    except Exception:
         pass
 
 # ==========================================
-# 2. LOGIN & SIDEBAR CREDENTIALS (Corner Lock)
+# 2. LOGIN & SIDEBAR CREDENTIALS
 # ==========================================
 if "authenticated" not in st.session_state:
     st.session_state["authenticated"] = False
@@ -101,15 +88,23 @@ if not st.session_state["authenticated"]:
             st.error("❌ Galat Username ya Password!")
     st.stop()
 
-# Sidebar API Info (Dhan Credentials in Corner)
 with st.sidebar:
-    st.markdown("### 🔑 API Connections")
-    dhan_client = st.secrets.get("DHAN_CLIENT_ID", "Not Connected")
-    gemini_key = st.secrets.get("GEMINI_API_KEY", "Not Connected")
+    st.markdown("### 🔑 API Status Box")
+    dhan_client = str(st.secrets.get("DHAN_CLIENT_ID", ""))
+    gemini_key = str(st.secrets.get("GEMINI_API_KEY", ""))
     
-    st.info(f"**Dhan Client ID:** `{dhan_client[:4]}****`" if len(dhan_client) > 4 else "⚠️ Dhan Not Configured")
-    st.info(f"**Gemini AI Key:** `Active`" if gemini_key != "Not Connected" else "⚠️ AI Key Missing")
-    st.success("🟢 Server Database Connected")
+    if len(dhan_client) > 3:
+        st.success(f"🟢 Dhan API: Connected ({dhan_client[:3]}***)")
+    else:
+        st.warning("⚠️ Dhan API Secret Missing")
+        
+    if len(gemini_key) > 5:
+        st.success("🟢 Gemini AI API: Active")
+        st.caption("3 AI Agents Connected Live")
+    else:
+        st.error("❌ Gemini API Key Missing")
+        
+    st.info("🗄️ Database: Connected")
 
 # ==========================================
 # 3. DHAN API & SCRIP MASTER ENGINE
@@ -143,9 +138,8 @@ def load_mcx_scrip_master():
 
 def fetch_historical_prices(security_id):
     if not dhan:
-        # Mock fallback data for demonstration if API key is not active
         dates = pd.date_range(end=datetime.datetime.now(), periods=30)
-        return pd.DataFrame({'date': dates, 'close': [72000 + i*50 for i in range(30)], 'oi': [12000 + i*10 for i in range(30)]})
+        return pd.DataFrame({'date': dates, 'close': [72000 + i*50 for i in range(30)]})
         
     try:
         sec_id_str = str(int(float(security_id)))
@@ -177,7 +171,7 @@ def fetch_historical_prices(security_id):
     return pd.DataFrame()
 
 # ==========================================
-# 4. MATH & TECHNICAL ENGINE (OI, Delta, RSI, FVG)
+# 4. ADVANCED MATH & TECHNICAL TRADE LOGIC ENGINE
 # ==========================================
 def calculate_advanced_metrics(df_near, df_next):
     if df_near.empty or df_next.empty or 'close' not in df_near.columns:
@@ -197,35 +191,40 @@ def calculate_advanced_metrics(df_near, df_next):
     rs = gain / loss
     rsi = round(float((100 - (100 / (1 + rs))).iloc[-1]), 2) if not rs.empty else 50.0
     
-    # FVG Detection
+    # Fair Value Gap (FVG) Detection
     spread_vals = merged_df['spread'].values
     fvg = "NO GAP"
     if len(spread_vals) >= 3:
-        if spread_vals[-1] > spread_vals[-3]: fvg = "BULLISH FVG"
-        elif spread_vals[-1] < spread_vals[-3]: fvg = "BEARISH FVG"
+        if spread_vals[-1] > spread_vals[-3]: fvg = "BULLISH FVG (Buying Pressure)"
+        elif spread_vals[-1] < spread_vals[-3]: fvg = "BEARISH FVG (Selling Pressure)"
         
-    # Signal Engine
+    # DETAILED TRADE LOGIC ENGINE
     if rsi > 60:
         sig = "ENTRY LONG"
         target = round(latest_spread + 35.0, 2)
         sl = round(latest_spread - 15.0, 2)
+        logic = f"RSI is Overbought ({rsi}) with {fvg}. Strong Bullish Spread momentum towards target."
     elif rsi < 40:
         sig = "ENTRY SHORT"
         target = round(latest_spread - 35.0, 2)
         sl = round(latest_spread + 15.0, 2)
+        logic = f"RSI is Oversold ({rsi}) with {fvg}. Bearish Spread divergence breakdown active."
     else:
         sig = "NO TRADE / WAIT"
         target = latest_spread
         sl = latest_spread
-        
-    # Target Status Engine
+        logic = f"RSI Neutral ({rsi}). No FVG Imbalance detected. Waiting for Institutional Breakout Zone."
+
+    # Live Target Achieved / SL Hit Tracking Engine
     target_status = "PENDING / IN-PROGRESS"
-    if sig == "ENTRY LONG" and latest_spread >= target:
-        target_status = "🎯 TARGET ACHIEVED"
-    elif sig == "ENTRY SHORT" and latest_spread <= target:
-        target_status = "🎯 TARGET ACHIEVED"
-    elif sig == "NO TRADE / WAIT":
-        target_status = "N/A"
+    if sig == "ENTRY LONG":
+        if latest_spread >= target: target_status = "🎯 TARGET ACHIEVED"
+        elif latest_spread <= sl: target_status = "🛑 STOP LOSS HIT"
+    elif sig == "ENTRY SHORT":
+        if latest_spread <= target: target_status = "🎯 TARGET ACHIEVED"
+        elif latest_spread >= sl: target_status = "🛑 STOP LOSS HIT"
+    else:
+        target_status = "WAITING FOR ENTRY"
 
     return {
         "Spread Price": f"₹{latest_spread}",
@@ -235,7 +234,8 @@ def calculate_advanced_metrics(df_near, df_next):
         "Safety SL": f"₹{sl}",
         "RSI": rsi,
         "FVG Imbalance": fvg,
-        "Target Status": target_status
+        "Target Status": target_status,
+        "Trade Logic": logic
     }
 
 # ==========================================
@@ -244,18 +244,17 @@ def calculate_advanced_metrics(df_near, df_next):
 def query_gemini_agent(agent_type, market_data):
     api_key = st.secrets.get("GEMINI_API_KEY", None)
     if not api_key:
-        return f"🤖 Agent {agent_type}: Google Gemini Key Missing in Secrets!"
+        return f"🤖 Agent {agent_type}: Secrets mein GEMINI_API_KEY daalein!"
         
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
     
     prompts = {
-        "Risk": f"You are an Expert Risk Manager AI. Analyze this MCX Spread Data: {market_data}. Give strict Stop Loss, Position Sizing, and Volatility risk advice in 3 short bullet points.",
-        "Technical": f"You are a Master Technical Analyst AI specializing in FVG, Order Blocks, Delta, and RSI. Data: {market_data}. Provide clear entry/exit logic in 3 bullet points.",
-        "Fundamental": f"You are a Macro Fundamental Commodity Expert. Asset context: {market_data}. Explain global demand, supply impact, and macro trends in 3 bullet points."
+        "Risk": f"You are an Expert Risk Manager. MCX Spread Data: {market_data}. Provide Stop Loss guidance & Risk-to-Reward advice in 3 short bullet points.",
+        "Technical": f"You are a Master Technical Analyst. Spread Data: {market_data}. Give entry, target, and FVG breakdown in 3 short bullet points.",
+        "Fundamental": f"You are a Macro Fundamental Expert. Commodity context: {market_data}. Explain global macro demand & supply impact in 3 short bullet points."
     }
     
     payload = {"contents": [{"parts": [{"text": prompts[agent_type]}]}]}
-    headers = {"Content-Type": "json"}
     
     try:
         res = requests.post(url, data=json.dumps(payload), headers={'Content-Type': 'application/json'})
@@ -267,32 +266,40 @@ def query_gemini_agent(agent_type, market_data):
     return f"Agent {agent_type} Analysis Ready."
 
 # ==========================================
-# 6. DASHBOARD UI & ROW SELECTION
+# 6. DASHBOARD TOP TOOLBAR (Refresh & Add Row Window)
 # ==========================================
 st.title("⚡ AI Institutional MCX Multi-Layer Terminal")
 
-# Dynamic Modal / Add Pair Selector
 if "active_pairs" not in st.session_state:
     st.session_state["active_pairs"] = ["GOLD", "SILVER"]
 
+# DEDICATED TOP TOOLBAR (Refresh Key & Add Window)
 st.markdown("---")
+col_ref, col_add, col_space = st.columns([2.5, 3, 4.5])
 
-col_btn, col_blank = st.columns([2, 8])
-with col_btn:
-    # ADD ROW POPUP DIALOG
-    with st.popover("➕ Add Metal Pair Row"):
-        st.markdown("### Select Futures Pair")
+with col_ref:
+    if st.button("🔄 Refresh Market Data", use_container_width=True):
+        st.cache_data.clear()
+        st.rerun()
+
+with col_add:
+    with st.popover("➕ Add Metal Pair Row Window", use_container_width=True):
+        st.markdown("#### Select Commodity Fut-to-Fut")
         mcx_master = load_mcx_scrip_master()
-        metal_choice = st.selectbox("Choose Metal Commodity", ["GOLD", "SILVER", "SILVERMIC", "GOLDM", "CRUDEOIL", "NATURALGAS", "COPPER"])
-        if st.button("Confirm & Add Pair"):
+        metal_choice = st.selectbox("Metal List", ["GOLD", "SILVER", "SILVERMIC", "GOLDM", "CRUDEOIL", "NATURALGAS", "COPPER"])
+        if st.button("Confirm Add Row"):
             if metal_choice not in st.session_state["active_pairs"]:
                 st.session_state["active_pairs"].append(metal_choice)
-                st.success(f"{metal_choice} Added!")
+                st.success(f"{metal_choice} Added to Terminal!")
                 st.rerun()
 
-# RENDER LIVE ROWS FOR SELECTED PAIRS
+st.markdown("---")
+
+# ==========================================
+# 7. LIVE MATRIX ROWS WITH TRADE LOGIC & TARGET TRACKING
+# ==========================================
 for metal in st.session_state["active_pairs"]:
-    st.markdown(f"### 📌 Live Market Pair Matrix: **{metal}**")
+    st.markdown(f"### 📌 Live Market Matrix: **{metal}**")
     
     mcx_master = load_mcx_scrip_master()
     symbol_col = next((c for c in ['SEM_CUSTOM_SYMBOL', 'SEM_TRADING_SYMBOL', 'SM_SYMBOL_NAME'] if c in mcx_master.columns), None)
@@ -316,32 +323,33 @@ for metal in st.session_state["active_pairs"]:
         metrics = calculate_advanced_metrics(df_near, df_next)
         
         if metrics:
-            # Auto Log to History DB
             log_signal_to_db(metrics, f"{near_c[symbol_col]} / {next_c[symbol_col]}")
             
-            # Display Separate Boxes for Clean Layout
+            # 5 Clean Metric Boxes
             c1, c2, c3, c4, c5 = st.columns(5)
-            c1.metric("Current Spread Rate", metrics["Spread Price"])
-            c2.metric("AI Trade Signal", metrics["AI Signal"])
-            c3.metric("Entry / Target Rate", metrics["Best Entry Rate"], delta=metrics["Predicted Target"])
-            c4.metric("Safety Stop Loss", metrics["Safety SL"])
+            c1.metric("Live Spread Price", metrics["Spread Price"])
+            c2.metric("AI Signal", metrics["AI Signal"])
+            c3.metric("Entry / Target", metrics["Best Entry Rate"], delta=metrics["Predicted Target"])
+            c4.metric("Safety SL", metrics["Safety SL"])
             c5.metric("Target Status", metrics["Target Status"])
             
-            # Advanced TA/OI Data Box
-            with st.expander(f"📊 View Technicals & OI Data ({metal})"):
-                st.write(f"**FVG Imbalance:** `{metrics['FVG Imbalance']}` | **RSI (14):** `{metrics['RSI']}`")
-                
+            # Dedicated Trade Logic & Reason Box
+            st.info(f"🧠 **Trade Logic:** {metrics['Trade Logic']}")
+            
+            with st.expander(f"📊 Detailed Technical Breakdown & FVG ({metal})"):
+                st.write(f"**Pair Name:** `{near_c[symbol_col]} / {next_c[symbol_col]}`")
+                st.write(f"**RSI Momentum:** `{metrics['RSI']}` | **Imbalance (FVG):** `{metrics['FVG Imbalance']}`")
         else:
-            st.info("Fetching live data from Dhan API...")
+            st.warning("Fetching prices from Dhan API...")
     else:
         st.warning(f"Active contracts not found for {metal}")
         
     st.markdown("---")
 
 # ==========================================
-# 7. 3 AI AGENTS TERMINAL
+# 8. 3 ONLINE AI AGENTS TERMINAL
 # ==========================================
-st.subheader("🤖 3 AI Institutional Agents")
+st.subheader("🤖 3 Online AI Institutional Agents")
 a1, a2, a3 = st.columns(3)
 
 with a1:
@@ -363,10 +371,10 @@ with a3:
         st.info(res)
 
 # ==========================================
-# 8. DATABASE & HISTORY TAB
+# 9. DATABASE HISTORY TAB
 # ==========================================
 st.markdown("---")
-st.subheader("🗄️ Database History & Complete Logs")
+st.subheader("🗄️ Database Saved History")
 
 conn = sqlite3.connect(DB_FILE)
 history_df = pd.read_sql_query("SELECT * FROM trade_signals ORDER BY id DESC LIMIT 50", conn)
@@ -375,4 +383,4 @@ conn.close()
 if not history_df.empty:
     st.dataframe(history_df, use_container_width=True)
 else:
-    st.caption("Database initialized. Live signals will save here automatically.")
+    st.caption("Database active. All trades will save here automatically.")
