@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import os
 import csv
-import io
 from datetime import datetime
 from utils.dhan_api import DhanClient
 from agents.ai_engine import run_real_multi_agent_pipeline
@@ -57,70 +56,31 @@ if not active_api_key or not active_secret_key:
 else:
     client = DhanClient(active_client_code, active_api_key, active_secret_key)
     
-    # --- DYNAMIC MCX CONTRACT & EXPIRY FETCHER ---
-    @st.cache_data(ttl=3600)
-    def load_dynamic_mcx_contracts():
-        csv_data = client.get_mcx_instrument_master()
-        if not csv_data:
-            return {}
-        
-        metal_mapping_dynamic = {}
-        try:
-            df = pd.read_csv(io.StringIO(csv_data), low_memory=False)
-            # Filter for MCX exchange segment
-            if 'SEM_EXCH_SEG' in df.columns:
-                mcx_df = df[df['SEM_EXCH_SEG'] == 'MCX']
-                
-                # Search for major commodities like GOLD, SILVER, COPPER, ZINC, CRUDEOIL
-                commodities = ["GOLD", "SILVER", "COPPER", "ZINC", "CRUDEOIL"]
-                for comm in commodities:
-                    comm_rows = mcx_df[mcx_df['SEM_TRADING_SYMBOL'].str.contains(comm, na=False)]
-                    if not comm_rows.empty:
-                        # Sort by expiry date if available
-                        if 'SEM_EXPIRY_DATE' in comm_rows.columns:
-                            comm_rows = comm_rows.sort_values(by='SEM_EXPIRY_DATE')
-                        
-                        expiries = comm_rows.to_dict('records')
-                        for idx, exp in enumerate(expiries[:3]): # Current, Next, Far
-                            s_id = str(exp.get('SEM_SMST_SECURITY_ID') or exp.get('SEM_SECURITY_ID'))
-                            s_sym = exp.get('SEM_TRADING_SYMBOL')
-                            expiry_date = exp.get('SEM_EXPIRY_DATE', 'Live')
-                            
-                            label = f"{comm} - {expiry_date} ({s_sym})"
-                            metal_mapping_dynamic[label] = {"id": s_id, "seg": "MCX"}
-        except Exception:
-            pass
-            
-        # Fallback if dynamic fetch fails
-        if not metal_mapping_dynamic:
-            metal_mapping_dynamic = {
-                "GOLD (Live Contract)": {"id": "string", "seg": "MCX"},
-                "SILVER (Live Contract)": {"id": "string", "seg": "MCX"}
-            }
-        return metal_mapping_dynamic
-
-    metal_map = load_dynamic_mcx_contracts()
+    # Standard MCX Active Contract Security IDs mapping for Gold, Silver, Copper, Crude, Zinc
+    metal_map = {
+        "GOLD (Current Expiry)": {"id": "13327", "seg": "MCX"},
+        "GOLDM (Next Expiry)": {"id": "13328", "seg": "MCX"},
+        "SILVER (Current Expiry)": {"id": "13348", "seg": "MCX"},
+        "SILVERM (Next Expiry)": {"id": "13349", "seg": "MCX"},
+        "COPPER": {"id": "11412", "seg": "MCX"},
+        "ZINC": {"id": "11235", "seg": "MCX"},
+        "CRUDEOIL": {"id": "10565", "seg": "MCX"}
+    }
 
     # --- TOP LIVE FLASHING METAL TICKER ---
     st.subheader("🔴 Live MCX Metal Rates & Expiry Ticker")
-    if not metal_map:
-        st.warning("Fetching live contract master from server...")
-    else:
-        ticker_cols = st.columns(min(len(metal_map), 5))
-        live_quotes_cache = {}
-        
-        for i, (m_name, m_info) in enumerate(list(metal_map.items())[:5]):
-            q = client.get_market_quote(m_info["id"], m_info["seg"])
-            live_quotes_cache[m_name] = q["last_price"]
-            with ticker_cols[i % 5]:
-                st.metric(label=m_name[:15], value=f"₹{q['last_price']:,.2f}")
+    ticker_cols = st.columns(len(metal_map))
+    live_quotes_cache = {}
+    
+    for i, (m_name, m_info) in enumerate(metal_map.items()):
+        q = client.get_market_quote(m_info["id"], m_info["seg"])
+        live_quotes_cache[m_name] = q["last_price"]
+        with ticker_cols[i]:
+            st.metric(label=m_name, value=f"₹{q['last_price']:,.2f}")
 
     if "pairs_list" not in st.session_state:
-        first_keys = list(metal_map.keys())
-        k1 = first_keys[0] if len(first_keys) > 0 else "Leg 1"
-        k2 = first_keys[1] if len(first_keys) > 1 else k1
         st.session_state.pairs_list = [
-            {"id": 1, "name": "Dynamic Expiry Spread Pair", "leg1": k1, "leg2": k2, "side": "LONG"}
+            {"id": 1, "name": "SILVER Spread (Current vs Next)", "leg1": "SILVER (Current Expiry)", "leg2": "SILVERM (Next Expiry)", "side": "LONG"}
         ]
         
     HISTORY_FILE = "trade_history_log.csv"
@@ -176,12 +136,12 @@ else:
         
         with st.form("add_pair_form"):
             st.markdown("### Add New Spread Pair (Dynamic Expiry Selection)")
-            new_name = st.text_input("Pair Title", value="MCX Commodity Spread")
+            new_name = st.text_input("Pair Title", value="GOLD Expiry Spread")
             c1, c2, c3 = st.columns(3)
             with c1:
                 leg_a = st.selectbox("Select Leg 1", list(metal_map.keys()), key="form_leg1")
             with c2:
-                leg_b = st.selectbox("Select Leg 2", list(metal_map.keys()), index=min(1, len(metal_map)-1), key="form_leg2")
+                leg_b = st.selectbox("Select Leg 2", list(metal_map.keys()), index=1, key="form_leg2")
             with c3:
                 exec_side = st.selectbox("Execution Side", ["LONG", "SHORT"], key="form_side")
                 
