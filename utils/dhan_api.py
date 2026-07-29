@@ -20,52 +20,25 @@ class DhanLiveClient:
         try:
             response = requests.get(url, headers=self._get_headers(), timeout=5)
             if response.status_code == 200:
-                return {"status": "connected", "message": "Dhan Account Successfully Connected!"}
+                return {"status": "connected", "message": "Dhan Account Connected Successfully"}
             else:
-                return {"status": "error", "message": f"API Error [{response.status_code}]: {response.text}"}
+                return {"status": "error", "message": f"Auth Failed [{response.status_code}]: {response.text}"}
         except Exception as e:
             return {"status": "error", "message": str(e)}
 
-    def get_live_metal_rates(self):
-        """Fetches all MCX metal rates using a single optimized batch structure to prevent Error 429."""
+    def get_live_market_data(self, security_id, exchange_segment="MCX_COMM"):
         url = f"{self.base_url}/marketfeed/ohlc"
-        headers = self._get_headers()
-        
-        # Correct exchange segment mapping for MCX commodities
         payload = {
-            "exchangeSegment": "MCX_COMM",
-            "securityId": ["13327", "13328", "13330", "13348", "13349", "11412", "11235", "10565"]
+            "exchangeSegment": exchange_segment,
+            "securityId": str(security_id)
         }
-        
-        symbols_map = {
-            "13327": "GOLD", "13328": "GOLDM", "13330": "GOLDGUINEA",
-            "13348": "SILVER", "13349": "SILVERM", "11412": "COPPER",
-            "11235": "ZINC", "10565": "CRUDEOIL"
-        }
-        
-        live_rates = []
         try:
-            res = requests.post(url, json=payload, headers=headers, timeout=5)
-            if res.status_code == 200:
-                data = res.json().get("data", {})
-                for sec_id, sym in symbols_map.items():
-                    sec_data = data.get(sec_id, {})
-                    ltp = sec_data.get("last_price") or sec_data.get("close")
-                    rate_str = f"₹{ltp}" if ltp else "Market Closed / Live Feed"
-                    live_rates.append({"Commodity": sym, "Security ID": sec_id, "Live LTP": rate_str})
-            else:
-                # Fallback if bulk payload expects single string or different format
-                for sec_id, sym in symbols_map.items():
-                    single_payload = {"exchangeSegment": "MCX_COMM", "securityId": sec_id}
-                    r = requests.post(url, json=single_payload, headers=headers, timeout=2)
-                    if r.status_code == 200:
-                        d = r.json().get("data", {}).get(sec_id, {})
-                        p = d.get("last_price", "Active")
-                        live_rates.append({"Commodity": sym, "Security ID": sec_id, "Live LTP": f"₹{p}" if isinstance(p, (int, float)) else p})
-                    else:
-                        live_rates.append({"Commodity": sym, "Security ID": sec_id, "Live LTP": "Connected"})
-        except Exception as e:
-            for sec_id, sym in symbols_map.items():
-                live_rates.append({"Commodity": sym, "Security ID": sec_id, "Live LTP": "Feed Active"})
-                
-        return live_rates
+            response = requests.post(url, json=payload, headers=self._get_headers(), timeout=5)
+            if response.status_code == 200:
+                res_json = response.json()
+                data = res_json.get("data", {})
+                if str(security_id) in data:
+                    return data[str(security_id)]
+            return None
+        except Exception:
+            return None
