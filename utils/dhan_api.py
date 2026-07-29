@@ -19,51 +19,23 @@ class DhanClient:
         try:
             res = requests.get(f"{self.base_url}/fundlimit", headers=self._headers(), timeout=5)
             if res.status_code == 200:
-                return True, "Connected Successfully"
-            return False, f"Error {res.status_code}: {res.text}"
+                return True, "Dhan Account Successfully Connected!"
+            return False, f"Auth Error [{res.status_code}]: {res.text}"
         except Exception as e:
             return False, str(e)
 
-    def get_all_mcx_spreads(self):
-        mcx_tokens = [
-            {"Symbol": "GOLD", "SecID": "13327", "Segment": "MCX_COMM"},
-            {"Symbol": "GOLDM", "SecID": "13328", "Segment": "MCX_COMM"},
-            {"Symbol": "SILVER", "SecID": "13348", "Segment": "MCX_COMM"},
-            {"Symbol": "SILVERM", "SecID": "13349", "Segment": "MCX_COMM"},
-            {"Symbol": "COPPER", "SecID": "11412", "Segment": "MCX_COMM"},
-            {"Symbol": "ZINC", "SecID": "11235", "Segment": "MCX_COMM"},
-            {"Symbol": "CRUDEOIL", "SecID": "10565", "Segment": "MCX_COMM"}
-        ]
-        
+    def get_live_market_data(self, security_id, exchange_segment="MCX_COMM"):
         url = f"{self.base_url}/marketfeed/ohlc"
-        spread_results = []
-        
-        for item in mcx_tokens:
-            payload = {
-                "exchangeSegment": item["Segment"],
-                "securityId": item["SecID"]
-            }
-            try:
-                response = requests.post(url, json=payload, headers=self._headers(), timeout=3)
-                if response.status_code == 200:
-                    res_json = response.json()
-                    data = res_json.get("data", {}).get(item["SecID"], {}) if isinstance(res_json, dict) else {}
-                    ltp = data.get("last_price", "N/A") if isinstance(data, dict) else "N/A"
-                    spread_results.append({
-                        "Commodity": item["Symbol"],
-                        "Security ID": item["SecID"],
-                        "LTP": ltp if ltp else "Awaiting Tick"
-                    })
-                else:
-                    spread_results.append({
-                        "Commodity": item["Symbol"],
-                        "Security ID": item["SecID"],
-                        "LTP": f"Error {response.status_code}"
-                    })
-            except Exception:
-                spread_results.append({
-                    "Commodity": item["Symbol"],
-                    "Security ID": item["SecID"],
-                    "LTP": "Timeout"
-                })
-        return spread_results
+        payload = {
+            "exchangeSegment": exchange_segment,
+            "securityId": str(security_id)
+        }
+        try:
+            response = requests.post(url, json=payload, headers=self._headers(), timeout=4)
+            if response.status_code == 200:
+                res_json = response.json()
+                data = res_json.get("data", {}).get(str(security_id), {})
+                return data.get("last_price", "Live Active")
+            return "Feed Error"
+        except Exception:
+            return "Timeout"
