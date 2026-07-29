@@ -35,13 +35,16 @@ class DhanClient:
             
         url = f"{self.base_url}/marketfeed/ltp"
         
-        if segment == "MCX":
-            segment = "MCX_COMM"
+        # Standardize segment name for Dhan API
+        if segment in ["MCX", "MCX_COMM"]:
+            segment_key = "MCX_COMM"
+        else:
+            segment_key = segment
 
         try:
             sec_id_int = int(security_id)
             payload = {
-                segment: [sec_id_int]
+                segment_key: [sec_id_int]
             }
 
             res = requests.post(url, json=payload, headers=self._headers(), timeout=5)
@@ -50,17 +53,21 @@ class DhanClient:
                 res_data = res.json()
                 data_dict = res_data.get("data", {})
                 
-                segment_data = data_dict.get(segment, {})
-                sec_key = str(sec_id_int)
-                
-                if sec_key in segment_data:
-                    last_p = segment_data[sec_key].get("last_price", 0.0)
-                    return {"last_price": float(last_p) if last_p else 0.0}
-                elif sec_key in data_dict:
-                    last_p = data_dict[sec_key].get("last_price", 0.0)
-                    return {"last_price": float(last_p) if last_p else 0.0}
+                # Check directly inside segment key
+                if segment_key in data_dict:
+                    seg_data = data_dict[segment_key]
+                    sec_str = str(sec_id_int)
+                    if sec_str in seg_data:
+                        price = seg_data[sec_str].get("last_price", 0.0)
+                        return {"last_price": float(price) if price else 0.0}
+                        
+                # Fallback check across root data dictionary
+                for seg, content in data_dict.items():
+                    if isinstance(content, dict) and str(sec_id_int) in content:
+                        price = content[str(sec_id_int)].get("last_price", 0.0)
+                        return {"last_price": float(price) if price else 0.0}
 
         except Exception as e:
-            print(f"Error fetching quote for {security_id}: {e}")
+            print(f"Error fetching LTP for ID {security_id}: {e}")
 
         return {"last_price": 0.0}
