@@ -9,11 +9,23 @@ import pandas as pd
 import requests
 import streamlit as st
 
-# Page Setup
 st.set_page_config(page_title="AI Institutional MCX Terminal", layout="wide")
 
 # ==========================================
-# 1. DATABASE ENGINE (History & Trade Logs)
+# 0. SMART SECRETS HELPER (Har naam se key dhoondhne ke liye)
+# ==========================================
+def get_secret_val(possible_keys):
+    for key in possible_keys:
+        if key in st.secrets and str(st.secrets[key]).strip():
+            return str(st.secrets[key]).strip()
+    return ""
+
+DHAN_CLIENT_ID = get_secret_val(["DHAN_CLIENT_ID", "DHAN_CLIENT", "CLIENT_ID"])
+DHAN_API_SECRET = get_secret_val(["DHAN_API_SECRET", "DHAN_SECRET", "DHAN_ACCESS_TOKEN", "DHAN_TOKEN", "API_SECRET"])
+GEMINI_API_KEY = get_secret_val(["GEMINI_API_KEY", "GEMINI_KEY", "GOOGLE_API_KEY", "GEMINI"])
+
+# ==========================================
+# 1. DATABASE ENGINE
 # ==========================================
 DB_FILE = "mcx_terminal_history.db"
 
@@ -67,15 +79,15 @@ def log_signal_to_db(metrics, pair_name):
         pass
 
 # ==========================================
-# 2. LOGIN & SIDEBAR CREDENTIALS
+# 2. LOGIN & SIDEBAR
 # ==========================================
 if "authenticated" not in st.session_state:
     st.session_state["authenticated"] = False
 
 if not st.session_state["authenticated"]:
     st.title("🔐 Institutional Terminal Login")
-    admin_user = st.secrets.get("ADMIN_USER", "admin")
-    admin_pass = st.secrets.get("ADMIN_PASS", "123456")
+    admin_user = get_secret_val(["ADMIN_USER"]) or "admin"
+    admin_pass = get_secret_val(["ADMIN_PASS"]) or "123456"
     
     u_in = st.text_input("Username")
     p_in = st.text_input("Password", type="password")
@@ -90,15 +102,13 @@ if not st.session_state["authenticated"]:
 
 with st.sidebar:
     st.markdown("### 🔑 API Status Box")
-    dhan_client = str(st.secrets.get("DHAN_CLIENT_ID", ""))
-    gemini_key = str(st.secrets.get("GEMINI_API_KEY", ""))
     
-    if len(dhan_client) > 3:
-        st.success(f"🟢 Dhan API: Connected ({dhan_client[:3]}***)")
+    if DHAN_API_SECRET:
+        st.success(f"🟢 Dhan API: Connected ({DHAN_CLIENT_ID[:3] if DHAN_CLIENT_ID else 'OK'}***)")
     else:
         st.warning("⚠️ Dhan API Secret Missing")
         
-    if len(gemini_key) > 5:
+    if GEMINI_API_KEY:
         st.success("🟢 Gemini AI API: Active")
         st.caption("3 AI Agents Connected Live")
     else:
@@ -107,13 +117,11 @@ with st.sidebar:
     st.info("🗄️ Database: Connected")
 
 # ==========================================
-# 3. DHAN API & SCRIP MASTER ENGINE
+# 3. DHAN API & SCRIP MASTER
 # ==========================================
 try:
     from dhanhq import DhanContext, dhanhq
-    CLIENT_ID = str(st.secrets.get("DHAN_CLIENT_ID", ""))
-    API_SECRET = str(st.secrets.get("DHAN_API_SECRET", ""))
-    dhan = dhanhq(CLIENT_ID, API_SECRET)
+    dhan = dhanhq(DHAN_CLIENT_ID, DHAN_API_SECRET) if DHAN_API_SECRET else None
 except Exception:
     dhan = None
 
@@ -173,7 +181,7 @@ def fetch_historical_prices(security_id):
     return pd.DataFrame()
 
 # ==========================================
-# 4. ADVANCED MATH & TECHNICAL TRADE LOGIC ENGINE
+# 4. MATH & TECHNICAL ENGINE
 # ==========================================
 def calculate_advanced_metrics(df_near, df_next):
     if df_near.empty or df_next.empty or 'close' not in df_near.columns:
@@ -186,21 +194,18 @@ def calculate_advanced_metrics(df_near, df_next):
     merged_df['spread'] = merged_df['close_near'] - merged_df['close_next']
     latest_spread = round(float(merged_df['spread'].iloc[-1]), 2)
     
-    # RSI Engine
     delta = merged_df['spread'].diff()
     gain = (delta.where(delta > 0, 0)).rolling(14).mean()
     loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
     rs = gain / loss
     rsi = round(float((100 - (100 / (1 + rs))).iloc[-1]), 2) if not rs.empty else 50.0
     
-    # Fair Value Gap (FVG) Detection
     spread_vals = merged_df['spread'].values
     fvg = "NO GAP"
     if len(spread_vals) >= 3:
         if spread_vals[-1] > spread_vals[-3]: fvg = "BULLISH FVG (Buying Pressure)"
         elif spread_vals[-1] < spread_vals[-3]: fvg = "BEARISH FVG (Selling Pressure)"
         
-    # DETAILED TRADE LOGIC ENGINE
     if rsi > 60:
         sig = "ENTRY LONG"
         target = round(latest_spread + 35.0, 2)
@@ -217,7 +222,6 @@ def calculate_advanced_metrics(df_near, df_next):
         sl = latest_spread
         logic = f"RSI Neutral ({rsi}). No FVG Imbalance detected. Waiting for Institutional Breakout Zone."
 
-    # Live Target Achieved / SL Hit Tracking Engine
     target_status = "PENDING / IN-PROGRESS"
     if sig == "ENTRY LONG":
         if latest_spread >= target: target_status = "🎯 TARGET ACHIEVED"
@@ -241,14 +245,13 @@ def calculate_advanced_metrics(df_near, df_next):
     }
 
 # ==========================================
-# 5. ADVANCED 3 AI AGENTS ENGINE
+# 5. 3 AI AGENTS ENGINE
 # ==========================================
 def query_gemini_agent(agent_type, market_data):
-    api_key = st.secrets.get("GEMINI_API_KEY", None)
-    if not api_key:
-        return f"🤖 Agent {agent_type}: Secrets mein GEMINI_API_KEY daalein!"
+    if not GEMINI_API_KEY:
+        return f"🤖 Agent {agent_type}: GEMINI_API_KEY Missing!"
         
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
     
     prompts = {
         "Risk": f"You are an Expert Risk Manager. MCX Spread Data: {market_data}. Provide Stop Loss guidance & Risk-to-Reward advice in 3 short bullet points.",
@@ -268,14 +271,13 @@ def query_gemini_agent(agent_type, market_data):
     return f"Agent {agent_type} Analysis Ready."
 
 # ==========================================
-# 6. DASHBOARD TOP TOOLBAR (Refresh & Add Row Window)
+# 6. DASHBOARD TOP TOOLBAR
 # ==========================================
 st.title("⚡ AI Institutional MCX Multi-Layer Terminal")
 
 if "active_pairs" not in st.session_state:
     st.session_state["active_pairs"] = ["GOLD", "SILVER"]
 
-# DEDICATED TOP TOOLBAR (Refresh Key & Add Window)
 st.markdown("---")
 col_ref, col_add, col_space = st.columns([2.5, 3, 4.5])
 
@@ -298,17 +300,16 @@ with col_add:
 st.markdown("---")
 
 # ==========================================
-# 7. LIVE MATRIX ROWS WITH SAFE COLUMN RESOLUTION
+# 7. LIVE MATRIX ROWS
 # ==========================================
 mcx_master = load_mcx_scrip_master()
 
-# SAFE COLUMN DETECTION LIST
 symbol_col = next((c for c in ['SEM_CUSTOM_SYMBOL', 'SEM_TRADING_SYMBOL', 'SM_SYMBOL_NAME', 'SYMBOL_NAME', 'TRADING_SYMBOL'] if c in mcx_master.columns), None)
 sec_id_col = next((c for c in ['SEM_SMST_SECURITY_ID', 'SECURITY_ID', 'SEM_SECURITY_ID'] if c in mcx_master.columns), None)
 expiry_col = next((c for c in ['SEM_EXPIRY_DATE', 'SM_EXPIRY_DATE', 'EXPIRY_DATE'] if c in mcx_master.columns), None)
 
 if not symbol_col or not sec_id_col:
-    st.error(f"Dhan CSV structure match nahi hua. Found columns: {list(mcx_master.columns[:8])}")
+    st.error("Dhan CSV structure match nahi hua.")
     st.stop()
 
 for metal in st.session_state["active_pairs"]:
@@ -333,7 +334,6 @@ for metal in st.session_state["active_pairs"]:
         if metrics:
             log_signal_to_db(metrics, f"{near_c[symbol_col]} / {next_c[symbol_col]}")
             
-            # 5 Clean Metric Boxes
             c1, c2, c3, c4, c5 = st.columns(5)
             c1.metric("Live Spread Price", metrics["Spread Price"])
             c2.metric("AI Signal", metrics["AI Signal"])
@@ -341,7 +341,6 @@ for metal in st.session_state["active_pairs"]:
             c4.metric("Safety SL", metrics["Safety SL"])
             c5.metric("Target Status", metrics["Target Status"])
             
-            # Dedicated Trade Logic & Reason Box
             st.info(f"🧠 **Trade Logic:** {metrics['Trade Logic']}")
             
             with st.expander(f"📊 Detailed Technical Breakdown & FVG ({metal})"):
@@ -379,7 +378,7 @@ with a3:
         st.info(res)
 
 # ==========================================
-# 9. DATABASE HISTORY TAB
+# 9. DATABASE HISTORY
 # ==========================================
 st.markdown("---")
 st.subheader("🗄️ Database Saved History")
