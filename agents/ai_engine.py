@@ -1,17 +1,18 @@
 import os
 from groq import Groq
+import streamlit as st
 
 class RealQuantMultiAgentDesk:
     def __init__(self):
-        groq_api_key = os.getenv("GROQ_API_KEY")
+        # Yeh directly Streamlit secrets se uthayega (local ya Streamlit Cloud)
+        groq_api_key = st.secrets.get("GROQ_API_KEY") or os.getenv("GROQ_API_KEY")
+        
         if not groq_api_key:
-            import streamlit as st
-            groq_api_key = st.secrets["api_credentials"]["groq_api_key"]
+            raise ValueError("GROQ_API_KEY not found in Streamlit secrets or environment variables!")
             
         self.client = Groq(api_key=groq_api_key)
 
     def agent_1_researcher(self, pair_symbol):
-        """Agent 1: Real macro & news sentiment analysis."""
         prompt = f"Agent 1 (Researcher): Analyze real-time macro sentiment and news flow for MCX commodity spread pair {pair_symbol}. Keep it sharp and factual."
         res = self.client.chat.completions.create(
             model="llama3-8b-8192", 
@@ -21,7 +22,6 @@ class RealQuantMultiAgentDesk:
         return res.choices[0].message.content
 
     def agent_2_technical_analyst(self, pair_symbol, current_spread, z_score, rsi):
-        """Agent 2: Real mathematical spread logic, Z-Score, and RSI evaluation."""
         prompt = f"Agent 2 (Technical Analyst): Evaluate real math metrics for {pair_symbol}. Spread: {current_spread}, Z-Score: {z_score}, RSI: {rsi}."
         res = self.client.chat.completions.create(
             model="llama3-8b-8192", 
@@ -31,7 +31,6 @@ class RealQuantMultiAgentDesk:
         return res.choices[0].message.content
 
     def agent_3_expert_advisor(self, research_report, technical_report):
-        """Agent 3: Real synthesis and final execution decision ('LIVE' or 'pending')."""
         prompt = f"""
         Agent 3 (Expert Advisor): Make final execution decision based on inputs.
         Research Report: {research_report}
