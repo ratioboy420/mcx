@@ -1,7 +1,7 @@
 import sys
 import os
 
-# Root directory path add karein import errors ke liye
+# Ensure project root is in python path
 sys.path.append(os.path.abspath(os.path.dirname(__file__)))
 
 import streamlit as st
@@ -9,7 +9,7 @@ import pandas as pd
 import csv
 from datetime import datetime
 
-# Custom API and Agent imports
+# Custom imports
 from utils.dhan_api import DhanClient
 from utils.instruments import MCX_INSTRUMENTS, get_instrument_names
 from agents.ai_engine import run_real_multi_agent_pipeline
@@ -26,52 +26,60 @@ default_client = get_secret("client_code")
 default_api = get_secret("api_key")
 default_groq = get_secret("groq_key")
 
+# --- BINDING SIDEBAR WITH SESSION STATE ---
 st.sidebar.title("🔐 API Credentials")
 st.sidebar.markdown("*Enter your credentials below:*")
 
-client_code = st.sidebar.text_input("Client Code", value=st.session_state.get("client_code", default_client))
-api_key = st.sidebar.text_input("API Key (Access Token)", type="password", value=st.session_state.get("api_key", default_api))
-secret_key = st.sidebar.text_input("Secret Key (24hr Expiry)", type="password", value=st.session_state.get("secret_key", ""))
-groq_key = st.sidebar.text_input("Groq AI API Key", type="password", value=st.session_state.get("groq_key", default_groq))
+if "client_code" not in st.session_state:
+    st.session_state["client_code"] = default_client
+if "api_key" not in st.session_state:
+    st.session_state["api_key"] = default_api
+if "secret_key" not in st.session_state:
+    st.session_state["secret_key"] = ""
+if "groq_key" not in st.session_state:
+    st.session_state["groq_key"] = default_groq
+if "is_connected" not in st.session_state:
+    st.session_state["is_connected"] = False
+
+client_code = st.sidebar.text_input("Client Code", key="client_code")
+api_key = st.sidebar.text_input("API Key (Access Token)", type="password", key="api_key")
+secret_key = st.sidebar.text_input("Secret Key (24hr Expiry)", type="password", key="secret_key")
+groq_key = st.sidebar.text_input("Groq AI API Key", type="password", key="groq_key")
 
 if groq_key:
     os.environ["GROQ_API_KEY"] = groq_key
 
 if st.sidebar.button("Save & Connect"):
     if client_code and api_key and secret_key:
-        st.session_state["client_code"] = client_code
-        st.session_state["api_key"] = api_key
-        st.session_state["secret_key"] = secret_key
-        st.session_state["groq_key"] = groq_key
-            
         client = DhanClient(client_code, api_key, secret_key)
         status, msg = client.test_connection()
         if status:
+            st.session_state["is_connected"] = True
             st.sidebar.success(msg)
         else:
+            st.session_state["is_connected"] = False
             st.sidebar.error(msg)
     else:
         st.sidebar.warning("Please fill Client Code, API Key, and daily Secret Key.")
 
+if st.session_state.get("is_connected"):
+    st.sidebar.success("🟢 Dhan API Connected & Active")
+
 st.title("⚡ MCX Dynamic Quant Spread & Expert Advisor Desk")
 
-# ACTIVE KEYS DEFINITION (Required before 'if' condition)
-active_api_key = st.session_state.get("api_key", api_key)
-active_client_code = st.session_state.get("client_code", client_code)
-active_secret_key = st.session_state.get("secret_key", secret_key)
+active_api_key = st.session_state.get("api_key", "")
+active_client_code = st.session_state.get("client_code", "")
+active_secret_key = st.session_state.get("secret_key", "")
 
-if not active_api_key or not active_secret_key:
+if not active_api_key or not active_secret_key or not st.session_state.get("is_connected"):
     st.info("👈 Please provide your credentials in the sidebar and click **Save & Connect** to initialize live tracking.")
 else:
     client = DhanClient(active_client_code, active_api_key, active_secret_key)
-    
-    # Metal Map dynamic instruments.py se auto load hoga
     metal_map = MCX_INSTRUMENTS
 
     # --- TOP LIVE FLASHING METAL TICKER ---
     st.subheader("🔴 Live MCX Metal Rates & Expiry Ticker")
     
-    # Multiselect for Ticker Metals
     all_names = get_instrument_names()
     default_selected = [n for n in ["GOLD (Current Expiry)", "SILVER (Current Expiry)", "COPPER", "CRUDEOIL (Current Expiry)"] if n in all_names]
     
