@@ -39,8 +39,8 @@ class DhanClient:
             segment = "MCX_COMM"
 
         try:
-            # Important: Dhan expects security_id as Integer inside array
             sec_id_int = int(security_id)
+            # Dhan Payload requires integer list inside market feed
             payload = {
                 segment: [sec_id_int]
             }
@@ -51,13 +51,16 @@ class DhanClient:
                 res_data = res.json()
                 data_dict = res_data.get("data", {})
                 
-                # Check inside Segment structure
+                # Check segment map
                 segment_data = data_dict.get(segment, {})
                 sec_key = str(sec_id_int)
                 
                 if sec_key in segment_data:
-                    last_price = segment_data[sec_key].get("last_price", 0.0)
-                    return {"last_price": float(last_price) if last_price else 0.0}
+                    last_p = segment_data[sec_key].get("last_price", 0.0)
+                    return {"last_price": float(last_p) if last_p else 0.0}
+                elif sec_key in data_dict:
+                    last_p = data_dict[sec_key].get("last_price", 0.0)
+                    return {"last_price": float(last_p) if last_p else 0.0}
 
         except Exception as e:
             print(f"Error fetching quote for {security_id}: {e}")
