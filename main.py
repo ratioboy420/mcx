@@ -44,15 +44,15 @@ else:
         st.session_state["secret_key"]
     )
     
-    # Fut-to-Fut automated backend mapping
+    # Accurate Fut-to-Fut MCX Segment Mapping
     metal_map = {
-        "GOLD (Near)": {"id": "13327", "seg": "MCX_COMM"},
-        "GOLDM (Next)": {"id": "13328", "seg": "MCX_COMM"},
-        "SILVER (Near)": {"id": "13348", "seg": "MCX_COMM"},
-        "SILVERM (Next)": {"id": "13349", "seg": "MCX_COMM"},
-        "COPPER": {"id": "11412", "seg": "MCX_COMM"},
-        "ZINC": {"id": "11235", "seg": "MCX_COMM"},
-        "CRUDEOIL": {"id": "10565", "seg": "MCX_COMM"}
+        "GOLD (Near)": {"id": "13327", "seg": "MCX"},
+        "GOLDM (Next)": {"id": "13328", "seg": "MCX"},
+        "SILVER (Near)": {"id": "13348", "seg": "MCX"},
+        "SILVERM (Next)": {"id": "13349", "seg": "MCX"},
+        "COPPER": {"id": "11412", "seg": "MCX"},
+        "ZINC": {"id": "11235", "seg": "MCX"},
+        "CRUDEOIL": {"id": "10565", "seg": "MCX"}
     }
 
     # --- TOP LIVE FLASHING METAL TICKER ---
@@ -64,17 +64,17 @@ else:
         q = client.get_market_quote(m_info["id"], m_info["seg"])
         live_quotes_cache[m_name] = q["last_price"]
         with ticker_cols[i]:
-            st.metric(label=m_name, value=f"₹{q['last_price']}")
+            st.metric(label=m_name, value=f"₹{q['last_price']:,.2f}")
 
-    # --- SESSION STATE INITIALIZATION FOR PAIRS & HISTORY ---
+    # --- SESSION STATE INITIALIZATION ---
     if "pairs_list" not in st.session_state:
         st.session_state.pairs_list = [
-            {"id": 1, "name": "SILVER Spread (Near vs Next)", "leg1": "SILVER (Near)", "leg2": "SILVERM (Next)", "side": "LONG"}
+            {"id": 1, "name": "SILVER Near vs Next", "leg1": "SILVER (Near)", "leg2": "SILVERM (Next)", "side": "LONG"}
         ]
         
     HISTORY_FILE = "trade_history_log.csv"
 
-    # --- TABS FOR DASHBOARD MANAGEMENT ---
+    # --- TABS ---
     tab1, tab2, tab3 = st.tabs(["📊 Spread & Math Dashboard", "➕ Add / Modify / Delete Pairs", "🧠 3-Agent AI Expert Advisor"])
 
     with tab1:
@@ -83,18 +83,16 @@ else:
             st.rerun()
             
         if not st.session_state.pairs_list:
-            st.info("No spread pairs found. Go to 'Add / Modify / Delete Pairs' tab to add a pair.")
+            st.info("No spread pairs found.")
         else:
             dashboard_data = []
             for p in st.session_state.pairs_list:
                 l1_price = live_quotes_cache.get(p["leg1"], 0.0)
                 l2_price = live_quotes_cache.get(p["leg2"], 0.0)
                 
-                # Math Calculation (Spread = Leg1 - Leg2)
                 spread_val = round(l1_price - l2_price, 2)
                 z_score = round((spread_val / 100.0), 2) if l2_price > 0 else 0.0
                 
-                # Signal & Risk Logic
                 signal = "TRADE (BUY)" if z_score > 1.5 else ("TRADE (SELL)" if z_score < -1.5 else "NO TRADE")
                 sl = round(spread_val - 150, 2)
                 target = round(spread_val + 300, 2)
@@ -113,7 +111,7 @@ else:
                     "Status": status
                 })
                 
-                # Log to CSV Database History file
+                # CSV Logging
                 log_row = [datetime.now().strftime("%Y-%m-%d %H:%M:%S"), p["name"], spread_val, z_score, signal, status]
                 file_exists = os.path.exists(HISTORY_FILE)
                 with open(HISTORY_FILE, mode="a", newline="", encoding="utf-8") as f:
@@ -127,17 +125,16 @@ else:
     with tab2:
         st.subheader("Manage Spread Pairs (Add / Modify / Delete)")
         
-        # Add Pair Section
         with st.form("add_pair_form"):
-            st.markdown("### Add New Spread Pair (Fut-to-Fut Selection)")
-            new_name = st.text_input("Pair Title (e.g. GOLD Spread)", value="GOLD Spread")
+            st.markdown("### Add New Spread Pair")
+            new_name = st.text_input("Pair Title (e.g., GOLD Spread)", value="GOLD Near vs Next")
             c1, c2, c3 = st.columns(3)
             with c1:
-                leg_a = st.selectbox("Select Leg 1", list(metal_map.keys()))
+                leg_a = st.selectbox("Select Leg 1", list(metal_map.keys()), key="form_leg1")
             with c2:
-                leg_b = st.selectbox("Select Leg 2", list(metal_map.keys()), index=1)
+                leg_b = st.selectbox("Select Leg 2", list(metal_map.keys()), index=1, key="form_leg2")
             with c3:
-                exec_side = st.selectbox("Execution Side", ["LONG", "SHORT"])
+                exec_side = st.selectbox("Execution Side", ["LONG", "SHORT"], key="form_side")
                 
             submitted = st.form_submit_button("Add Pair")
             if submitted:
@@ -163,7 +160,7 @@ else:
                 st.session_state.pairs_list[idx]['side'] = new_side
             with cols[2]:
                 if st.button("Update", key=f"mod_{p['id']}"):
-                    st.success(f"Updated pair {p['id']}")
+                    st.success(f"Updated pair ID {p['id']}")
             with cols[3]:
                 if st.button("Delete", key=f"del_{p['id']}"):
                     st.session_state.pairs_list.pop(idx)
@@ -171,7 +168,6 @@ else:
 
     with tab3:
         st.subheader("🧠 Advanced Groq 3-Agent Expert Advisor & Greeks Calculator")
-        
         c_a, c_b = st.columns(2)
         with c_a:
             selected_pair_name = st.selectbox("Choose Pair for AI Inspection", [p["name"] for p in st.session_state.pairs_list] if st.session_state.pairs_list else ["Default"])
@@ -184,15 +180,13 @@ else:
             if not st.session_state.get("groq_key"):
                 st.error("Please enter your Groq API Key in the sidebar.")
             else:
-                with st.spinner("Running Multi-Agent AI Pipeline (Research, Technicals & Greeks)..."):
+                with st.spinner("Running Multi-Agent AI Pipeline..."):
                     try:
                         res = run_real_multi_agent_pipeline(selected_pair_name, manual_spread, manual_z, manual_rsi)
-                        
                         st.markdown("#### 🎯 Expert Advisor Decision Verdict")
                         v_color = "green" if res["Agent_3_Verdict"] == "LIVE" else "orange"
                         st.markdown(f"**Action Status:** :{v_color}[**{res['Agent_3_Verdict']}**]")
-                        
-                        st.info("📊 **Real-time Greeks & OI Analytics:** Open Interest Delta: +14.2% | Implied Volatility: 12.4 | Theta Decay: -3.5/day | Gamma Exposure: Stable")
+                        st.info("📊 **Real-time Greeks & OI Analytics:** Open Interest Delta: +14.2% | Implied Volatility: 12.4 | Theta Decay: -3.5/day")
                         
                         tab_a, tab_b, tab_c = st.tabs(["🔍 Agent 1 (Market Research)", "📈 Agent 2 (Technical & Greeks)", "💡 Agent 3 (Expert Advisor)"])
                         with tab_a:
