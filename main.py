@@ -127,6 +127,8 @@ def load_mcx_scrip_master():
     
     if exch_col and inst_col:
         mcx_fut = df[(df[exch_col] == 'MCX') & (df[inst_col] == 'FUTCOM')].copy()
+    elif exch_col:
+        mcx_fut = df[df[exch_col] == 'MCX'].copy()
     else:
         mcx_fut = df.copy()
         
@@ -296,16 +298,22 @@ with col_add:
 st.markdown("---")
 
 # ==========================================
-# 7. LIVE MATRIX ROWS WITH TRADE LOGIC & TARGET TRACKING
+# 7. LIVE MATRIX ROWS WITH SAFE COLUMN RESOLUTION
 # ==========================================
+mcx_master = load_mcx_scrip_master()
+
+# SAFE COLUMN DETECTION LIST
+symbol_col = next((c for c in ['SEM_CUSTOM_SYMBOL', 'SEM_TRADING_SYMBOL', 'SM_SYMBOL_NAME', 'SYMBOL_NAME', 'TRADING_SYMBOL'] if c in mcx_master.columns), None)
+sec_id_col = next((c for c in ['SEM_SMST_SECURITY_ID', 'SECURITY_ID', 'SEM_SECURITY_ID'] if c in mcx_master.columns), None)
+expiry_col = next((c for c in ['SEM_EXPIRY_DATE', 'SM_EXPIRY_DATE', 'EXPIRY_DATE'] if c in mcx_master.columns), None)
+
+if not symbol_col or not sec_id_col:
+    st.error(f"Dhan CSV structure match nahi hua. Found columns: {list(mcx_master.columns[:8])}")
+    st.stop()
+
 for metal in st.session_state["active_pairs"]:
     st.markdown(f"### 📌 Live Market Matrix: **{metal}**")
     
-    mcx_master = load_mcx_scrip_master()
-    symbol_col = next((c for c in ['SEM_CUSTOM_SYMBOL', 'SEM_TRADING_SYMBOL', 'SM_SYMBOL_NAME'] if c in mcx_master.columns), None)
-    sec_id_col = next((c for c in ['SEM_SMST_SECURITY_ID', 'SECURITY_ID'] if c in mcx_master.columns), None)
-    expiry_col = next((c for c in ['SEM_EXPIRY_DATE', 'SM_EXPIRY_DATE'] if c in mcx_master.columns), None)
-
     pattern = rf"^{metal}\d*"
     asset_contracts = mcx_master[mcx_master[symbol_col].astype(str).str.contains(pattern, regex=True, na=False)]
     
