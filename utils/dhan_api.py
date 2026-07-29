@@ -4,12 +4,13 @@ class DhanClient:
     def __init__(self, client_code, api_key, secret_key):
         self.client_code = client_code
         self.api_key = api_key
+        # Dhan v2 API mein access-token ki jagah daily secret/access token use hota hai
         self.secret_key = secret_key
         self.base_url = "https://api.dhan.co/v2"
 
     def _headers(self):
         return {
-            "access-token": self.api_key,
+            "access-token": self.secret_key, # 24hr expiry token yahan pass hoga
             "client-id": self.client_code,
             "Content-Type": "application/json",
             "Accept": "application/json"
@@ -20,7 +21,9 @@ class DhanClient:
             res = requests.get(f"{self.base_url}/fundlimit", headers=self._headers(), timeout=5)
             if res.status_code == 200:
                 return True, "Dhan Account Connected Successfully!"
-            return False, f"Auth Error [{res.status_code}]: {res.text}"
+            else:
+                err_data = res.json()
+                return False, f"Auth Error [{res.status_code}]: {err_data.get('errorMessage', res.text)}"
         except Exception as e:
             return False, str(e)
 
