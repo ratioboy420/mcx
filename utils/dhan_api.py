@@ -19,23 +19,26 @@ class DhanClient:
         try:
             res = requests.get(f"{self.base_url}/fundlimit", headers=self._headers(), timeout=5)
             if res.status_code == 200:
-                return True, "Dhan Account Successfully Connected!"
+                return True, "Dhan Account Connected Successfully!"
             return False, f"Auth Error [{res.status_code}]: {res.text}"
         except Exception as e:
             return False, str(e)
 
-    def get_live_market_data(self, security_id, exchange_segment="MCX_COMM"):
+    def get_market_quote(self, security_id, segment="MCX_COMM"):
         url = f"{self.base_url}/marketfeed/ohlc"
         payload = {
-            "exchangeSegment": exchange_segment,
+            "exchangeSegment": segment,
             "securityId": str(security_id)
         }
         try:
-            response = requests.post(url, json=payload, headers=self._headers(), timeout=4)
-            if response.status_code == 200:
-                res_json = response.json()
-                data = res_json.get("data", {}).get(str(security_id), {})
-                return data.get("last_price", "Live Active")
-            return "Feed Error"
+            res = requests.post(url, json=payload, headers=self._headers(), timeout=4)
+            if res.status_code == 200:
+                data = res.json().get("data", {}).get(str(security_id), {})
+                return {
+                    "last_price": data.get("last_price", 0.0),
+                    "high": data.get("high", 0.0),
+                    "low": data.get("low", 0.0)
+                }
         except Exception:
-            return "Timeout"
+            pass
+        return {"last_price": 0.0, "high": 0.0, "low": 0.0}
