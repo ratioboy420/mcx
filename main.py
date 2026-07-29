@@ -1,30 +1,67 @@
 import streamlit as st
-from views.dashboard import render_dashboard
-from views.add_pair import render_add_pair
-from core.dhan_client import DhanClient
+import pandas as pd
+from utils.dhan_api import DhanLiveClient
+from agents.ai_engine import run_real_multi_agent_pipeline
 
-st.set_page_config(page_title="MCX Quant & AI Trading Desk", page_icon="⚡", layout="wide")
+st.set_page_config(page_title="Real Quant Trading & Live Metal Ticker Desk", layout="wide")
 
-st.sidebar.markdown("## 🔐 Dhan API Credentials")
-st.sidebar.info("Enter your 3 required credentials for live market feed & WebSocket integration:")
+st.sidebar.markdown("### 🔐 Dhan API Credentials")
+client_code = st.sidebar.text_input("Client Code", type="default")
+api_key = st.sidebar.text_input("API Key (Access Token)", type="password")
+secret_key = st.sidebar.text_input("Secret Key", type="password")
 
-client_id_input = st.sidebar.text_input("Client ID / Code", value="1112783972")
-access_token_input = st.sidebar.text_input("Access Token (API Key)", type="password")
-secret_key_input = st.sidebar.text_input("Secret Key", type="password")
+st.markdown("### ⚡ Real-Time Quant Trading & Live Metal Desk")
 
-if st.sidebar.button("Test & Connect API"):
-    client = DhanClient(client_id_input, access_token_input, secret_key_input)
-    success, msg = client.test_connection()
-    if success:
-        st.sidebar.success(msg)
-    else:
-        st.sidebar.error(msg)
-
-st.sidebar.markdown("---")
-st.sidebar.markdown("### 🧭 Navigation")
-nav_choice = st.sidebar.radio("Go to", ["Trading Desk & AI Insights", "Add New Contract Pair"])
-
-if nav_choice == "Trading Desk & AI Insights":
-    render_dashboard(client_id_input, access_token_input, secret_key_input)
+if not client_code or not api_key or not secret_key:
+    st.warning("⚠️ Please enter all **3 API credentials** in the sidebar to verify your Dhan account connection and view live metal rates.")
 else:
-    render_add_pair(client_id_input, access_token_input, secret_key_input)
+    # Initialize real Dhan client
+    dhan = DhanLiveClient(client_code, api_key, secret_key)
+    
+    # 1. Verify Connection Status
+    with st.spinner("Verifying Dhan account connection..."):
+        conn_status = dhan.verify_account_connection()
+        
+    if conn_status["status"] == "connected":
+        st.success(f"✅ **Status:** {conn_status['message']}")
+    else:
+        st.error(f"❌ **Status:** {conn_status['message']}")
+        st.stop()
+
+    st.markdown("---")
+    
+    # 2. Live Metal Rates Ticker Column (Connection & Feed Monitor)
+    st.markdown("#### 📈 Live MCX Metal Rates Ticker (All Commodities Feed)")
+    
+    with st.spinner("Fetching live metal rates from Dhan..."):
+        metal_rates = dhan.get_live_metal_rates()
+        
+    cols = st.columns(len(metal_rates))
+    for idx, metal in enumerate(metal_rates):
+        with cols[idx]:
+            st.metric(label=metal["Commodity"], value=str(metal["Live Rate"]))
+
+    st.markdown("---")
+    
+    # 3. Real Multi-Agent AI Core Section
+    st.markdown("### 🧠 Real Groq 3-Agent AI Inspector")
+    
+    c1, c2 = st.columns(2)
+    with c1:
+        target_pair = st.text_input("Enter Spread Pair Symbol", value="GOLD_AUG_OCT")
+        spread_input = st.number_input("Current Spread Value", value=3474.0)
+    with c2:
+        z_input = st.number_input("Calculated Z-Score", value=0.42)
+        rsi_input = st.number_input("Calculated RSI", value=48.5)
+
+    if st.button("Run Real 3-Agent Analysis", type="primary"):
+        with st.spinner("Executing real multi-agent pipeline via Groq..."):
+            try:
+                analysis = run_real_multi_agent_pipeline(target_pair, spread_input, z_input, rsi_input)
+                
+                st.markdown("#### 🤖 Execution Results")
+                st.success(f"**Agent 1 (Researcher):**\n{analysis['Agent_1']}")
+                st.info(f"**Agent 2 (Technical Analyst):**\n{analysis['Agent_2']}")
+                st.warning(f"**Agent 3 Expert Verdict [{analysis['Agent_3_Verdict']}]:**\n{analysis['Strategy_Note']}")
+            except Exception as ai_err:
+                st.error(f"AI Execution Error: {str(ai_err)}")
