@@ -4,13 +4,12 @@ class DhanClient:
     def __init__(self, client_code, api_key, secret_key):
         self.client_code = client_code
         self.api_key = api_key
-        # Dhan v2 API mein access-token ki jagah daily secret/access token use hota hai
         self.secret_key = secret_key
         self.base_url = "https://api.dhan.co/v2"
 
     def _headers(self):
         return {
-            "access-token": self.secret_key, # 24hr expiry token yahan pass hoga
+            "access-token": self.secret_key,
             "client-id": self.client_code,
             "Content-Type": "application/json",
             "Accept": "application/json"
@@ -27,7 +26,24 @@ class DhanClient:
         except Exception as e:
             return False, str(e)
 
+    def get_mcx_instrument_master(self):
+        """
+        Dynamically downloads Dhan's official security master for MCX 
+        to map live symbols and active expiries automatically.
+        """
+        try:
+            url = "https://images.dhan.co/api-data/api-scrip-master.csv"
+            res = requests.get(url, timeout=10)
+            if res.status_code == 200:
+                return res.text
+        except Exception:
+            pass
+        return None
+
     def get_market_quote(self, security_id, segment="MCX"):
+        if not security_id or security_id == "0":
+            return {"last_price": 0.0}
+            
         url = f"{self.base_url}/marketfeed/ohlc"
         payload = {
             "exchangeSegment": segment,
