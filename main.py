@@ -44,7 +44,7 @@ else:
         st.session_state["secret_key"]
     )
     
-    # Metal mapping dictionary (Fut-to-Fut automated backend mapping)
+    # Fut-to-Fut automated backend mapping
     metal_map = {
         "GOLD (Near)": {"id": "13327", "seg": "MCX_COMM"},
         "GOLDM (Next)": {"id": "13328", "seg": "MCX_COMM"},
@@ -192,7 +192,6 @@ else:
                         v_color = "green" if res["Agent_3_Verdict"] == "LIVE" else "orange"
                         st.markdown(f"**Action Status:** :{v_color}[**{res['Agent_3_Verdict']}**]")
                         
-                        # Greeks Data Simulation Card
                         st.info("📊 **Real-time Greeks & OI Analytics:** Open Interest Delta: +14.2% | Implied Volatility: 12.4 | Theta Decay: -3.5/day | Gamma Exposure: Stable")
                         
                         tab_a, tab_b, tab_c = st.tabs(["🔍 Agent 1 (Market Research)", "📈 Agent 2 (Technical & Greeks)", "💡 Agent 3 (Expert Advisor)"])
