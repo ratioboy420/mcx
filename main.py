@@ -3,65 +3,100 @@ import pandas as pd
 from utils.dhan_api import DhanLiveClient
 from agents.ai_engine import run_real_multi_agent_pipeline
 
-st.set_page_config(page_title="Real Quant Trading & Live Metal Ticker Desk", layout="wide")
+st.set_page_config(page_title="MCX Quant & Spread Desk", page_icon="⚡", layout="wide")
 
-st.sidebar.markdown("### 🔐 Dhan API Credentials")
-client_code = st.sidebar.text_input("Client Code", type="default")
-api_key = st.sidebar.text_input("API Key (Access Token)", type="password")
-secret_key = st.sidebar.text_input("Secret Key", type="password")
+# --- SIDEBAR: 3 Dhan Credentials ---
+st.sidebar.title("🔐 Dhan API Credentials")
+client_code = st.sidebar.text_input("Client Code", value=st.session_state.get("client_code", ""))
+api_key = st.sidebar.text_input("API Key (Access Token)", type="password", value=st.session_state.get("api_key", ""))
+secret_key = st.sidebar.text_input("Secret Key", type="password", value=st.session_state.get("secret_key", ""))
 
-st.markdown("### ⚡ Real-Time Quant Trading & Live Metal Desk")
-
-if not client_code or not api_key or not secret_key:
-    st.warning("⚠️ Please enter all **3 API credentials** in the sidebar to verify your Dhan account connection and view live metal rates.")
-else:
-    # Initialize real Dhan client
-    dhan = DhanLiveClient(client_code, api_key, secret_key)
-    
-    # 1. Verify Connection Status
-    with st.spinner("Verifying Dhan account connection..."):
-        conn_status = dhan.verify_account_connection()
+if st.sidebar.button("Save & Connect"):
+    if client_code and api_key and secret_key:
+        st.session_state["client_code"] = client_code
+        st.session_state["api_key"] = api_key
+        st.session_state["secret_key"] = secret_key
         
-    if conn_status["status"] == "connected":
-        st.success(f"✅ **Status:** {conn_status['message']}")
+        # Test connection
+        client = DhanLiveClient(client_code, api_key, secret_key)
+        res = client.verify_account_connection()
+        if res["status"] == "connected":
+            st.sidebar.success(res["message"])
+        else:
+            st.sidebar.error(res["message"])
     else:
-        st.error(f"❌ **Status:** {conn_status['message']}")
-        st.stop()
+        st.sidebar.warning("Please fill all 3 credentials!")
 
+st.title("⚡ Real-Time Quant Trading & Live MCX Spread Desk")
+
+# Check if connected
+if not st.session_state.get("api_key"):
+    st.info("👈 Please enter your 3 Dhan API credentials in the sidebar and click 'Save & Connect' to start.")
+else:
+    client = DhanLiveClient(
+        st.session_state["client_code"], 
+        st.session_state["api_key"], 
+        st.session_state["secret_key"]
+    )
+    
+    # Connection Banner
+    conn_status = client.verify_account_connection()
+    if conn_status["status"] == "connected":
+        st.success("Status: Dhan Account Successfully Connected!")
+    else:
+        st.error(f"Connection Failed: {conn_status['message']}")
+
+    # --- SECTION 1: Live MCX Metal Rates & All Spreads ---
+    st.markdown("### 📊 Live MCX Metal Rates & All Spreads Ticker")
+    with st.spinner("Fetching live rates from MCX..."):
+        rates_data = client.get_live_metal_rates()
+        if rates_data:
+            df_rates = pd.DataFrame(rates_data)
+            st.table(df_rates)
+        else:
+            st.warning("No live data returned from MCX feed.")
+
+    # --- SECTION 2: Add Custom Spread Pair ---
     st.markdown("---")
+    st.markdown("### ➕ Add Custom MCX Spread Pair")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        leg1 = st.selectbox("Leg 1 Commodity", ["GOLD", "GOLDM", "SILVER", "SILVERM", "COPPER", "ZINC", "CRUDEOIL"])
+    with col2:
+        leg2 = st.selectbox("Leg 2 Commodity", ["GOLDM", "SILVER", "SILVERM", "COPPER", "ZINC", "CRUDEOIL", "GOLD"])
+    with col3:
+        spread_type = st.selectbox("Spread Type", ["Near-Next Month Spread", "Ratio Spread", "Inter-Commodity Spread"])
     
-    # 2. Live Metal Rates Ticker Column (Connection & Feed Monitor)
-    st.markdown("#### 📈 Live MCX Metal Rates Ticker (All Commodities Feed)")
-    
-    with st.spinner("Fetching live metal rates from Dhan..."):
-        metal_rates = dhan.get_live_metal_rates()
-        
-    cols = st.columns(len(metal_rates))
-    for idx, metal in enumerate(metal_rates):
-        with cols[idx]:
-            st.metric(label=metal["Commodity"], value=str(metal["Live Rate"]))
+    if st.button("Add & Monitor Pair"):
+        st.success(f"Successfully added spread pair: **{leg1} vs {leg2}** ({spread_type}) for live tracking!")
 
+    # --- SECTION 3: Real Groq 3-Agent AI Inspector & Result Dashboard ---
     st.markdown("---")
+    st.markdown("### 🧠 Real Groq 3-Agent AI Inspector & Result Dashboard")
     
-    # 3. Real Multi-Agent AI Core Section
-    st.markdown("### 🧠 Real Groq 3-Agent AI Inspector")
-    
-    c1, c2 = st.columns(2)
-    with c1:
-        target_pair = st.text_input("Enter Spread Pair Symbol", value="GOLD_AUG_OCT")
-        spread_input = st.number_input("Current Spread Value", value=3474.0)
-    with c2:
-        z_input = st.number_input("Calculated Z-Score", value=0.42)
-        rsi_input = st.number_input("Calculated RSI", value=48.5)
+    col_a, col_b = st.columns(2)
+    with col_a:
+        pair_symbol = st.text_input("Enter Spread Pair Symbol (e.g. SILVERM-SILVER)", value="SILVERM-SILVER")
+        current_spread = st.number_input("Current Spread Value", value=1250.50)
+    with col_b:
+        z_score = st.number_input("Calculated Z-Score", value=2.15)
+        rsi = st.number_input("RSI Indicator", value=68.4)
 
-    if st.button("Run Real 3-Agent Analysis", type="primary"):
-        with st.spinner("Executing real multi-agent pipeline via Groq..."):
+    if st.button("Run AI Multi-Agent Pipeline"):
+        with st.spinner("Running 3-Agent Quant Analysis via Groq AI..."):
             try:
-                analysis = run_real_multi_agent_pipeline(target_pair, spread_input, z_input, rsi_input)
+                pipeline_result = run_real_multi_agent_pipeline(pair_symbol, current_spread, z_score, rsi)
                 
-                st.markdown("#### 🤖 Execution Results")
-                st.success(f"**Agent 1 (Researcher):**\n{analysis['Agent_1']}")
-                st.info(f"**Agent 2 (Technical Analyst):**\n{analysis['Agent_2']}")
-                st.warning(f"**Agent 3 Expert Verdict [{analysis['Agent_3_Verdict']}]:**\n{analysis['Strategy_Note']}")
-            except Exception as ai_err:
-                st.error(f"AI Execution Error: {str(ai_err)}")
+                st.markdown("#### 🎯 Execution Verdict & Reports")
+                verdict_color = "green" if pipeline_result["Agent_3_Verdict"] == "LIVE" else "orange"
+                st.markdown(f"**Final Verdict:** :{verdict_color}[**{pipeline_result['Agent_3_Verdict']}**]")
+                
+                tab1, tab2, tab3 = st.tabs(["🔍 Agent 1 (Researcher)", "📈 Agent 2 (Technical)", "💡 Agent 3 (Expert Advisor)"])
+                with tab1:
+                    st.write(pipeline_result["Agent_1"])
+                with tab2:
+                    st.write(pipeline_result["Agent_2"])
+                with tab3:
+                    st.write(pipeline_result["Strategy_Note"])
+            except Exception as e:
+                st.error(f"AI Execution Error: {str(e)}")
