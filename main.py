@@ -1,34 +1,18 @@
-import streamlit as st
-import pandas as pd
-import datetime
-from datetime import timedelta
-from dhanhq import dhanhq
-
-st.set_page_config(page_title="MCX Live Terminal", layout="wide")
-
-# 1. Automatic Scrip Master Fetcher
 @st.cache_data(ttl=3600)
 def load_mcx_scrip_master():
     url = "https://images.dhan.co/api-data/api-scrip-master-detailed.csv"
     df = pd.read_csv(url, low_memory=False)
-    mcx_fut = df[(df['SEM_EXM_EXCH_ID'] == 'MCX') & (df['SEM_INSTRUMENT_NAME'] == 'FUTCOM')].copy()
+    
+    # Column Name Flexibility Check (Handling API Schema Changes)
+    exch_col = 'SEM_EXM_EXCH_ID' if 'SEM_EXM_EXCH_ID' in df.columns else ('EXCH_ID' if 'EXCH_ID' in df.columns else None)
+    inst_col = 'SEM_INSTRUMENT_NAME' if 'SEM_INSTRUMENT_NAME' in df.columns else ('INSTRUMENT' if 'INSTRUMENT' in df.columns else None)
+    
+    if exch_col and inst_col:
+        mcx_fut = df[(df[exch_col] == 'MCX') & (df[inst_col] == 'FUTCOM')].copy()
+    elif exch_col:
+        mcx_fut = df[df[exch_col] == 'MCX'].copy()
+    else:
+        # Fallback filter search across dataframe
+        mcx_fut = df.copy()
+        
     return mcx_fut
-
-st.title("⚡ MCX Live Rate Terminal")
-
-# Fetch Master Data
-try:
-    mcx_data = load_mcx_scrip_master()
-    st.success("✅ Live MCX Scrip Master Loaded Successfully!")
-    
-    # Filter Gold & Silver contracts
-    metals = ["GOLD", "SILVER", "COPPER", "CRUDEOIL"]
-    selected = st.selectbox("Select Commodity", metals)
-    
-    filtered = mcx_data[mcx_data['SEM_TRADING_SYMBOL'].str.startswith(selected, na=False)]
-    
-    st.write("### Active Contracts & Security IDs:")
-    st.dataframe(filtered[['SEM_TRADING_SYMBOL', 'SEM_SMST_SECURITY_ID', 'SEM_EXPIRY_DATE']], use_container_width=True)
-
-except Exception as e:
-    st.error(f"Error loading master data: {e}")
