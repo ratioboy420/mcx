@@ -47,7 +47,7 @@ if not st.session_state["authenticated"]:
     st.stop()
 
 # ==========================================
-# 2. FIXED DHAN API INITIALIZATION (v2.1.0+ / Secrets)
+# 2. FIXED DHAN API INITIALIZATION
 # ==========================================
 CLIENT_ID = str(st.secrets.get("DHAN_CLIENT_ID", ""))
 API_SECRET = str(st.secrets.get("DHAN_API_SECRET", ""))
@@ -84,9 +84,9 @@ def load_mcx_scrip_master():
     url = "https://images.dhan.co/api-data/api-scrip-master-detailed.csv"
     df = pd.read_csv(url, low_memory=False)
     
-    # Flexible column matching for Dhan CSV updates
-    exch_col = 'SEM_EXM_EXCH_ID' if 'SEM_EXM_EXCH_ID' in df.columns else ('EXCH_ID' if 'EXCH_ID' in df.columns else None)
-    inst_col = 'SEM_INSTRUMENT_NAME' if 'SEM_INSTRUMENT_NAME' in df.columns else ('INSTRUMENT' if 'INSTRUMENT' in df.columns else None)
+    # Flexible column detection for Exchange & Instrument
+    exch_col = next((c for c in ['SEM_EXM_EXCH_ID', 'EXCH_ID', 'SEM_EXCHANGE'] if c in df.columns), None)
+    inst_col = next((c for c in ['SEM_INSTRUMENT_NAME', 'INSTRUMENT', 'SEM_EXCH_INSTRUMENT_TYPE'] if c in df.columns), None)
     
     if exch_col and inst_col:
         mcx_fut = df[(df[exch_col] == 'MCX') & (df[inst_col] == 'FUTCOM')].copy()
@@ -95,8 +95,9 @@ def load_mcx_scrip_master():
     else:
         mcx_fut = df.copy()
         
-    if 'SEM_EXPIRY_DATE' in mcx_fut.columns:
-        mcx_fut['SEM_EXPIRY_DATE'] = pd.to_datetime(mcx_fut['SEM_EXPIRY_DATE'], errors='coerce')
+    expiry_col = next((c for c in ['SEM_EXPIRY_DATE', 'SM_EXPIRY_DATE', 'EXPIRY_DATE'] if c in mcx_fut.columns), None)
+    if expiry_col:
+        mcx_fut[expiry_col] = pd.to_datetime(mcx_fut[expiry_col], errors='coerce')
         
     return mcx_fut
 
@@ -119,13 +120,7 @@ def fetch_historical_prices(security_id):
         )
         if isinstance(response, dict) and response.get('status') == 'success':
             data = response.get('data', {})
-            if isinstance(data, list):
-                df = pd.DataFrame(data)
-            elif isinstance(data, dict):
-                df = pd.DataFrame(data)
-            else:
-                return pd.DataFrame()
-                
+            df = pd.DataFrame(data) if isinstance(data, (list, dict)) else pd.DataFrame()
             if 'start_Time' in df.columns:
                 df.rename(columns={'start_Time': 'date'}, inplace=True)
             return df
@@ -134,7 +129,7 @@ def fetch_historical_prices(security_id):
         
     return pd.DataFrame()
 
-# RSI Calculation Engine
+# Native Pandas RSI Calculation Engine
 def calculate_rsi(series, period=14):
     delta = series.diff()
     gain = delta.where(delta > 0, 0.0)
@@ -200,7 +195,7 @@ def calculate_spread_signals(df_near, df_next):
     }
 
 # ==========================================
-# 5. MAIN DASHBOARD UI
+# 5. MAIN DASHBOARD UI (SAFE KEY MAPPING)
 # ==========================================
 st.title("🔮 AI Institutional Multi-Layer Spread Terminal")
 st.caption("Live Production Feed | Automated Dynamic Spreads & TA Core Engine")
@@ -213,14 +208,21 @@ if st.button("🔄 Refresh Market Data"):
 with st.spinner("Fetching Live Scrips & Calculating Signals from Dhan API..."):
     mcx_master = load_mcx_scrip_master()
     
-    symbol_col = 'SEM_TRADING_SYMBOL' if 'SEM_TRADING_SYMBOL' in mcx_master.columns else 'SEM_CUSTOM_SYMBOL'
-    
+    # Safe Dynamic Symbol Column Resolution
+    symbol_col = next((c for c in ['SEM_CUSTOM_SYMBOL', 'SEM_TRADING_SYMBOL', 'SM_SYMBOL_NAME', 'SYMBOL_NAME', 'TRADING_SYMBOL'] if c in mcx_master.columns), None)
+    sec_id_col = next((c for c in ['SEM_SMST_SECURITY_ID', 'SECURITY_ID', 'SEM_SECURITY_ID'] if c in mcx_master.columns), None)
+    expiry_col = next((c for c in ['SEM_EXPIRY_DATE', 'SM_EXPIRY_DATE', 'EXPIRY_DATE'] if c in mcx_master.columns), None)
+
+    if not symbol_col or not sec_id_col:
+        st.error(f"Dhan CSV structure error: Required columns missing. Available: {list(mcx_master.columns[:8])}")
+        st.stop()
+
     pattern = rf"^{selected_asset}\d*"
     asset_contracts = mcx_master[mcx_master[symbol_col].astype(str).str.contains(pattern, regex=True, na=False)]
     
-    if 'SEM_EXPIRY_DATE' in asset_contracts.columns:
+    if expiry_col and expiry_col in asset_contracts.columns:
         today_dt = pd.to_datetime(datetime.datetime.now().date())
-        asset_contracts = asset_contracts[asset_contracts['SEM_EXPIRY_DATE'] >= today_dt].sort_values(by='SEM_EXPIRY_DATE')
+        asset_contracts = asset_contracts[asset_contracts[expiry_col] >= today_dt].sort_values(by=expiry_col)
         
     if len(asset_contracts) >= 2:
         near_contract = asset_contracts.iloc[0]
@@ -228,8 +230,6 @@ with st.spinner("Fetching Live Scrips & Calculating Signals from Dhan API..."):
         
         near_symbol = near_contract[symbol_col]
         next_symbol = next_contract[symbol_col]
-        
-        sec_id_col = 'SEM_SMST_SECURITY_ID' if 'SEM_SMST_SECURITY_ID' in mcx_master.columns else 'SECURITY_ID'
         
         df_near = fetch_historical_prices(near_contract[sec_id_col])
         df_next = fetch_historical_prices(next_contract[sec_id_col])
@@ -245,6 +245,6 @@ with st.spinner("Fetching Live Scrips & Calculating Signals from Dhan API..."):
             }])
             st.dataframe(display_df, use_container_width=True)
         else:
-            st.warning("Historical data calculate nahi ho paya. Dhan Access Token ya contract liquidity check karein.")
+            st.warning("Historical data calculate nahi ho paya. Contract liquidity ya Dhan Secrets verify karein.")
     else:
         st.error(f"Is asset ({selected_asset}) ke liye 2 active future expiry contracts nahi mile.")
