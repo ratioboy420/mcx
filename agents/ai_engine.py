@@ -1,59 +1,35 @@
 import os
 from groq import Groq
-import streamlit as st
-
-class RealQuantMultiAgentDesk:
-    def __init__(self):
-        # Yeh directly Streamlit secrets se uthayega (local ya Streamlit Cloud)
-        groq_api_key = st.secrets.get("GROQ_API_KEY") or os.getenv("GROQ_API_KEY")
-        
-        if not groq_api_key:
-            raise ValueError("GROQ_API_KEY not found in Streamlit secrets or environment variables!")
-            
-        self.client = Groq(api_key=groq_api_key)
-
-    def agent_1_researcher(self, pair_symbol):
-        prompt = f"Agent 1 (Researcher): Analyze real-time macro sentiment and news flow for MCX commodity spread pair {pair_symbol}. Keep it sharp and factual."
-        res = self.client.chat.completions.create(
-            model="llama3-8b-8192", 
-            messages=[{"role": "user", "content": prompt}], 
-            max_tokens=150
-        )
-        return res.choices[0].message.content
-
-    def agent_2_technical_analyst(self, pair_symbol, current_spread, z_score, rsi):
-        prompt = f"Agent 2 (Technical Analyst): Evaluate real math metrics for {pair_symbol}. Spread: {current_spread}, Z-Score: {z_score}, RSI: {rsi}."
-        res = self.client.chat.completions.create(
-            model="llama3-8b-8192", 
-            messages=[{"role": "user", "content": prompt}], 
-            max_tokens=150
-        )
-        return res.choices[0].message.content
-
-    def agent_3_expert_advisor(self, research_report, technical_report):
-        prompt = f"""
-        Agent 3 (Expert Advisor): Make final execution decision based on inputs.
-        Research Report: {research_report}
-        Technical Report: {technical_report}
-        Strictly output 'LIVE' or 'pending' at the beginning, followed by precise execution rationale.
-        """
-        res = self.client.chat.completions.create(
-            model="llama3-8b-8192", 
-            messages=[{"role": "user", "content": prompt}], 
-            max_tokens=200
-        )
-        return res.choices[0].message.content
 
 def run_real_multi_agent_pipeline(pair_symbol, spread_val, z_score, rsi):
-    engine = RealQuantMultiAgentDesk()
-    r1 = engine.agent_1_researcher(pair_symbol)
-    r2 = engine.agent_2_technical_analyst(pair_symbol, spread_val, z_score, rsi)
-    r3 = engine.agent_3_expert_advisor(r1, r2)
+    groq_key = os.getenv("GROQ_API_KEY")
+    if not groq_key:
+        import streamlit as st
+        groq_key = st.session_state.get("groq_key", "")
+        
+    if not groq_key:
+        raise ValueError("Groq API Key missing! Please enter it in the sidebar.")
+        
+    client = Groq(api_key=groq_key)
     
-    verdict = "LIVE" if "live" in r3.lower() else "pending"
+    # Agent 1: Researcher
+    r1_prompt = f"Agent 1 (Researcher): Analyze macro sentiment for MCX spread pair {pair_symbol}."
+    res1 = client.chat.completions.create(model="llama3-8b-8192", messages=[{"role": "user", "content": r1_prompt}], max_tokens=150)
+    
+    # Agent 2: Technical Analyst
+    r2_prompt = f"Agent 2 (Technical Analyst): Evaluate Z-Score {z_score} and RSI {rsi} for spread {spread_val}."
+    res2 = client.chat.completions.create(model="llama3-8b-8192", messages=[{"role": "user", "content": r2_prompt}], max_tokens=150)
+    
+    # Agent 3: Expert Advisor
+    r3_prompt = f"Agent 3 (Expert Advisor): Give final execution verdict ('LIVE' or 'pending') based on Research & Tech reports."
+    res3 = client.chat.completions.create(model="llama3-8b-8192", messages=[{"role": "user", "content": r3_prompt}], max_tokens=150)
+    
+    ans3_text = res3.choices[0].message.content
+    verdict = "LIVE" if "live" in ans3_text.lower() else "pending"
+    
     return {
-        "Agent_1": r1,
-        "Agent_2": r2,
+        "Agent_1": res1.choices[0].message.content,
+        "Agent_2": res2.choices[0].message.content,
         "Agent_3_Verdict": verdict,
-        "Strategy_Note": r3
+        "Strategy_Note": ans3_text
     }
