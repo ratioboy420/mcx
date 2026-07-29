@@ -25,7 +25,6 @@ class DhanClient:
             return False, str(e)
 
     def get_market_quote(self, security_id, segment="MCX"):
-        # Dhan API v2 marketfeed OHLC endpoint format
         url = f"{self.base_url}/marketfeed/ohlc"
         payload = {
             "exchangeSegment": segment,
@@ -35,7 +34,6 @@ class DhanClient:
             res = requests.post(url, json=payload, headers=self._headers(), timeout=4)
             if res.status_code == 200:
                 res_data = res.json()
-                # Parsing market feed response safely
                 data_dict = res_data.get("data", {})
                 if str(security_id) in data_dict:
                     item_data = data_dict[str(security_id)]
