@@ -40,7 +40,6 @@ class DhanClient:
 
         try:
             sec_id_int = int(security_id)
-            # Dhan Payload requires integer list inside market feed
             payload = {
                 segment: [sec_id_int]
             }
@@ -51,7 +50,6 @@ class DhanClient:
                 res_data = res.json()
                 data_dict = res_data.get("data", {})
                 
-                # Check segment map
                 segment_data = data_dict.get(segment, {})
                 sec_key = str(sec_id_int)
                 
