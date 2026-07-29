@@ -27,15 +27,16 @@ class DhanLiveClient:
             return {"status": "error", "message": str(e)}
 
     def get_live_metal_rates(self):
-        """Fetches real market quote/LTP directly using Dhan live market feed structure."""
-        # MCX Commodity identifiers mapping for Dhan
+        """Fetches all MCX spread and metal rates using Dhan Market Quote API."""
         mcx_securities = [
             {"securityId": "13327", "symbol": "GOLD"},
             {"securityId": "13328", "symbol": "GOLDM"},
             {"securityId": "13330", "symbol": "GOLDGUINEA"},
             {"securityId": "13348", "symbol": "SILVER"},
             {"securityId": "13349", "symbol": "SILVERM"},
-            {"securityId": "11412", "symbol": "COPPER"}
+            {"securityId": "11412", "symbol": "COPPER"},
+            {"securityId": "11235", "symbol": "ZINC"},
+            {"securityId": "10565", "symbol": "CRUDEOIL"}
         ]
         
         url = f"{self.base_url}/marketfeed/ohlc"
@@ -44,23 +45,22 @@ class DhanLiveClient:
         live_rates = []
         for item in mcx_securities:
             payload = {
-                "exchangeSegment": "MCX",
+                "exchangeSegment": "MCX_COMM",
                 "securityId": str(item["securityId"])
             }
             try:
                 res = requests.post(url, json=payload, headers=headers, timeout=5)
                 if res.status_code == 200:
                     data = res.json()
-                    # Parsing response safely based on Dhan OHLC structure
                     market_data = data.get("data", {})
                     if item["securityId"] in market_data:
-                        ltp = market_data[item["securityId"]].get("last_price", "No LTP")
-                        live_rates.append({"Commodity": item["symbol"], "Live Rate": f"₹{ltp}"})
+                        ltp = market_data[item["securityId"]].get("last_price", "N/A")
+                        live_rates.append({"Commodity": item["symbol"], "Security ID": item["securityId"], "Live LTP": f"₹{ltp}"})
                     else:
-                        live_rates.append({"Commodity": item["symbol"], "Live Rate": "Data Not Found"})
+                        live_rates.append({"Commodity": item["symbol"], "Security ID": item["securityId"], "Live LTP": "Awaiting Tick"})
                 else:
-                    live_rates.append({"Commodity": item["symbol"], "Live Rate": f"Err {res.status_code}"})
-            except Exception as e:
-                live_rates.append({"Commodity": item["symbol"], "Live Rate": "Timeout"})
+                    live_rates.append({"Commodity": item["symbol"], "Security ID": item["securityId"], "Live LTP": f"Error {res.status_code}"})
+            except Exception:
+                live_rates.append({"Commodity": item["symbol"], "Security ID": item["securityId"], "Live LTP": "Timeout"})
                 
         return live_rates
