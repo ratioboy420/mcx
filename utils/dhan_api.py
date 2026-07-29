@@ -25,7 +25,6 @@ class DhanClient:
             return False, str(e)
 
     def get_all_mcx_spreads(self):
-        # All MCX primary metal and energy contracts mapping with security IDs
         mcx_tokens = [
             {"Symbol": "GOLD", "SecID": "13327", "Segment": "MCX_COMM"},
             {"Symbol": "GOLDM", "SecID": "13328", "Segment": "MCX_COMM"},
@@ -47,31 +46,24 @@ class DhanClient:
             try:
                 response = requests.post(url, json=payload, headers=self._headers(), timeout=3)
                 if response.status_code == 200:
-                    data = response.json().get("data", {}).get(item["SecID"], {})
-                    ltp = data.get("last_price", 0.0)
-                    high = data.get("high", 0.0)
-                    low = data.get("low", 0.0)
+                    res_json = response.json()
+                    data = res_json.get("data", {}).get(item["SecID"], {}) if isinstance(res_json, dict) else {}
+                    ltp = data.get("last_price", "N/A") if isinstance(data, dict) else "N/A"
                     spread_results.append({
                         "Commodity": item["Symbol"],
                         "Security ID": item["SecID"],
-                        "LTP": ltp if ltp else "Awaiting Tick",
-                        "High": high,
-                        "Low": low
+                        "LTP": ltp if ltp else "Awaiting Tick"
                     })
                 else:
                     spread_results.append({
                         "Commodity": item["Symbol"],
                         "Security ID": item["SecID"],
-                        "LTP": "API Limit / Closed",
-                        "High": 0.0,
-                        "Low": 0.0
+                        "LTP": f"Error {response.status_code}"
                     })
             except Exception:
                 spread_results.append({
                     "Commodity": item["Symbol"],
                     "Security ID": item["SecID"],
-                    "LTP": "Connection Error",
-                    "High": 0.0,
-                    "Low": 0.0
+                    "LTP": "Timeout"
                 })
         return spread_results
