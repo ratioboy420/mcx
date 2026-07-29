@@ -1,7 +1,7 @@
 import sys
 import os
 
-# Ensure project root is in python path for utils & agents imports
+# Ensure project root is in python path
 sys.path.append(os.path.abspath(os.path.dirname(__file__)))
 
 import streamlit as st
@@ -61,15 +61,15 @@ if not active_api_key or not active_secret_key:
 else:
     client = DhanClient(active_client_code, active_api_key, active_secret_key)
     
-    # Updated Segment to MCX_COMM and added valid Dhan MCX Security IDs
+    # Standard MCX Security IDs for Dhan
     metal_map = {
-        "GOLD (Current Expiry)": {"id": "252321", "seg": "MCX_COMM"},
-        "GOLDM (Next Expiry)": {"id": "252322", "seg": "MCX_COMM"},
-        "SILVER (Current Expiry)": {"id": "252350", "seg": "MCX_COMM"},
-        "SILVERM (Next Expiry)": {"id": "252351", "seg": "MCX_COMM"},
-        "COPPER": {"id": "252380", "seg": "MCX_COMM"},
-        "ZINC": {"id": "252390", "seg": "MCX_COMM"},
-        "CRUDEOIL": {"id": "252410", "seg": "MCX_COMM"}
+        "GOLD (Current Expiry)": {"id": 252321, "seg": "MCX_COMM"},
+        "GOLDM (Next Expiry)": {"id": 252322, "seg": "MCX_COMM"},
+        "SILVER (Current Expiry)": {"id": 252350, "seg": "MCX_COMM"},
+        "SILVERM (Next Expiry)": {"id": 252351, "seg": "MCX_COMM"},
+        "COPPER": {"id": 252380, "seg": "MCX_COMM"},
+        "ZINC": {"id": 252390, "seg": "MCX_COMM"},
+        "CRUDEOIL": {"id": 252410, "seg": "MCX_COMM"}
     }
 
     # --- TOP LIVE FLASHING METAL TICKER ---
@@ -79,9 +79,10 @@ else:
     
     for i, (m_name, m_info) in enumerate(metal_map.items()):
         q = client.get_market_quote(m_info["id"], m_info["seg"])
-        live_quotes_cache[m_name] = q.get("last_price", 0.0)
+        price = q.get("last_price", 0.0)
+        live_quotes_cache[m_name] = price
         with ticker_cols[i]:
-            st.metric(label=m_name, value=f"₹{q.get('last_price', 0.0):,.2f}")
+            st.metric(label=m_name, value=f"₹{price:,.2f}")
 
     if "pairs_list" not in st.session_state:
         st.session_state.pairs_list = [
@@ -134,7 +135,6 @@ else:
                         writer.writerow(["Timestamp", "Pair Name", "Spread Value", "Z-Score", "Signal", "Status"])
                     writer.writerow(log_row)
 
-            # Updated width='stretch' to remove deprecation warning
             st.dataframe(pd.DataFrame(dashboard_data), width="stretch")
 
     with tab2:
