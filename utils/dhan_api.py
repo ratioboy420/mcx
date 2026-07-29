@@ -26,22 +26,8 @@ class DhanClient:
         except Exception as e:
             return False, str(e)
 
-    def get_mcx_instrument_master(self):
-        """
-        Dynamically downloads Dhan's official security master for MCX 
-        to map live symbols and active expiries automatically.
-        """
-        try:
-            url = "https://images.dhan.co/api-data/api-scrip-master.csv"
-            res = requests.get(url, timeout=10)
-            if res.status_code == 200:
-                return res.text
-        except Exception:
-            pass
-        return None
-
     def get_market_quote(self, security_id, segment="MCX"):
-        if not security_id or security_id == "0":
+        if not security_id or str(security_id) == "0":
             return {"last_price": 0.0}
             
         url = f"{self.base_url}/marketfeed/ohlc"
