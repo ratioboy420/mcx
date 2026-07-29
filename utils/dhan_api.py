@@ -24,7 +24,8 @@ class DhanClient:
         except Exception as e:
             return False, str(e)
 
-    def get_market_quote(self, security_id, segment="MCX_COMM"):
+    def get_market_quote(self, security_id, segment="MCX"):
+        # Dhan API v2 marketfeed OHLC endpoint format
         url = f"{self.base_url}/marketfeed/ohlc"
         payload = {
             "exchangeSegment": segment,
@@ -33,12 +34,13 @@ class DhanClient:
         try:
             res = requests.post(url, json=payload, headers=self._headers(), timeout=4)
             if res.status_code == 200:
-                data = res.json().get("data", {}).get(str(security_id), {})
-                return {
-                    "last_price": data.get("last_price", 0.0),
-                    "high": data.get("high", 0.0),
-                    "low": data.get("low", 0.0)
-                }
+                res_data = res.json()
+                # Parsing market feed response safely
+                data_dict = res_data.get("data", {})
+                if str(security_id) in data_dict:
+                    item_data = data_dict[str(security_id)]
+                    last_price = item_data.get("last_price", 0.0)
+                    return {"last_price": float(last_price) if last_price else 0.0}
         except Exception:
             pass
-        return {"last_price": 0.0, "high": 0.0, "low": 0.0}
+        return {"last_price": 0.0}
